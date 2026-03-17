@@ -12,6 +12,8 @@ DEFAULT_CONFIG = {
     "exp_dir": "./outputs/default_run",
     "boundary_tol_px": 2,
     "max_show_preds": 6,
+    "run_ruler_eval": False,
+    "rotulos_dir": "",
     # =========================
     # Modelo
     # =========================
