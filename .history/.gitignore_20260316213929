@@ -1,9 +1,0 @@
-outputs/
-*.pth
-*.pt
-*.ckpt
-__pycache__/
-.ipynb_checkpoints/
-.env
-.DS_Store
-Thumbs.db

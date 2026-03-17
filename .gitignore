@@ -1,9 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Modelos y salidas
 outputs/
 *.pth
 *.pt
 *.ckpt
-__pycache__/
-.ipynb_checkpoints/
-.env
-.DS_Store
+
+# Windows
+desktop.ini
 Thumbs.db
+
+# VS Code history
+.history/
+
+# Entornos
+.env
+.venv/
+venv/
