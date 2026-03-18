@@ -1,2 +1,11 @@
-    "lambda_t": 0.01,
-    "temp_start_epoch": 1,
+numpy
+pandas
+matplotlib
+opencv-python
+Pillow
+albumentations
+torch
+torchvision
+segmentation-models-pytorch
+tqdm
+jupyter
