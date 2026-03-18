@@ -438,7 +438,7 @@ def build_dataloaders(
             generator=g,
         )
 
-    if cfg.get("use_semi", False) and temporal_unlab_ds is not None:
+    if cfg.get("use_temp_consistency", False) and temporal_unlab_ds is not None:
         temp_batch_size = max(1, cfg["batch_size"] // 4)
 
         temporal_unlab_loader = DataLoader(

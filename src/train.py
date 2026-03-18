@@ -72,7 +72,7 @@ def run_one_epoch(
     n_samples = 0
 
     use_semi = bool(train and cfg.get("use_semi", False) and (unl_loader is not None) and (teacher is not None))
-    use_temp = bool(train and cfg.get("use_semi", False) and (temp_loader is not None))
+    use_temp = bool(train and cfg.get("use_temp_consistency", False) and (temp_loader is not None))
 
     unl_iter = iter(unl_loader) if use_semi else None
     temp_iter = iter(temp_loader) if use_temp else None
