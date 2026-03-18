@@ -8,11 +8,22 @@ import torch
 
 
 def seed_everything(seed: int = 42):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
 
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    try:
+        torch.use_deterministic_algorithms(False)
+    except Exception:
+        pass
 
 def ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)

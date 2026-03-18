@@ -4,7 +4,7 @@ import time
 
 import torch
 import torch.nn.functional as F
-
+from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 from src.losses import build_criterion
 from src.metrics import eval_imagewise_and_global
 from src.models import create_model
@@ -221,12 +221,30 @@ def run_training(cfg: dict, loaders: dict):
     print("Modelo:", cfg["arch"], cfg["backbone"], "| params ≈", count_parameters_m(model), "M")
 
     criterion = build_criterion(cfg)
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
+    optimizer = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, model.parameters()),
         lr=cfg["lr"],
         weight_decay=cfg.get("weight_decay", 1e-4),
     )
 
+    warmup_epochs = int(cfg.get("warmup_epochs", 10))
+    scheduler = SequentialLR(
+        optimizer,
+        schedulers=[
+            LinearLR(
+                optimizer,
+                start_factor=1e-3,
+                end_factor=1.0,
+                total_iters=warmup_epochs,
+            ),
+            CosineAnnealingLR(
+                optimizer,
+                T_max=max(1, cfg["epochs"] - warmup_epochs),
+                eta_min=0.0,
+            ),
+        ],
+        milestones=[warmup_epochs],
+    )
     teacher = None
     if cfg.get("use_semi", False):
         teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"]).to(device)
@@ -241,6 +259,8 @@ def run_training(cfg: dict, loaders: dict):
     history = []
     best_val_loss = float("inf")
     best_path = os.path.join(exp_dir, "best_model.pt")
+    patience_es = int(cfg.get("patience_es", 20))
+    epochs_without_improve = 0
 
     for epoch in range(1, cfg["epochs"] + 1):
         t0 = time.time()
@@ -304,11 +324,19 @@ def run_training(cfg: dict, loaders: dict):
 
         if row["val_loss"] < best_val_loss:
             best_val_loss = row["val_loss"]
+            epochs_without_improve = 0
             torch.save(model.state_dict(), best_path)
             print(">> Mejor checkpoint guardado en:", best_path)
+        else:
+            epochs_without_improve += 1
 
         save_history_csv(history, os.path.join(exp_dir, "train_log.csv"))
 
+        scheduler.step()
+
+        if epochs_without_improve >= patience_es:
+            print(f">> Early stopping activado en epoch {epoch} (patience={patience_es})")
+            break
     return {
         "model": model,
         "teacher": teacher,

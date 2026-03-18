@@ -6,31 +6,39 @@ DEFAULT_CONFIG = {
     # Dataset / entorno
     # =========================
     "dataset": "inca",
-    "mode": "colab",   # "local" o "colab"
+    "mode": "colab",
     "img_root": "",
     "msk_root": "",
     "exp_dir": "./outputs/default_run",
-    "boundary_tol_px": 2,
-    "max_show_preds": 6,
-    "run_ruler_eval": False,
     "rotulos_dir": "",
+    "unlabeled_subdir": "unlabeling_r10_max0/images",
 
     # =========================
     # Modelo
     # =========================
-    "arch": "unetpp",              # "unet", "unetpp", "fpn", "pspnet", ...
+    "arch": "unetpp",
     "backbone": "efficientnet-b3",
     "n_classes": 1,
 
     # =========================
     # Entrenamiento
     # =========================
-    "batch_size": 4,
-    "num_workers": 2,
-    "epochs": 100,
+    "target_size": (320, 320),
+    "use_pad": True,
+    "imagenet_norm": False,
+
+    "batch_size": 5,
+    "num_workers": 4,
+    "drop_last": True,
+    "num_augmented": 5,
+
+    "epochs": 2000,
     "lr": 1e-3,
     "weight_decay": 1e-4,
-    "seed": 42,
+    "warmup_epochs": 10,
+    "patience_es": 20,
+
+    "seed": 0,
     "device": "cuda",
 
     # =========================
@@ -52,7 +60,7 @@ DEFAULT_CONFIG = {
     # =========================
     # Consistencia temporal
     # =========================
-    "use_temp_consistency": False,
+    "use_temp_consistency": True,
     "lambda_t": 0.00,
     "max_temp_delta": 2,
     "temp_start_epoch": 4000,
@@ -62,38 +70,35 @@ DEFAULT_CONFIG = {
     # =========================
     # Preprocesamiento
     # =========================
-    "target_size": (320, 320),
-    "use_pad": True,
-    "imagenet_norm": False,
-    "image_preproc": "base",       # "base", "denoise", "he", "clahe_soft", "ad"
-    "mask_smoothing": "none",      # "none", "morph", "gaussian"
+    "image_preproc": "base",
+    "mask_smoothing": "none",
     "use_fixed_crop": False,
 
     # =========================
     # Augmentations supervisadas
     # =========================
     "aug_train_enable": True,
-    "aug_horizontal_flip_p": 0.5,
-    "aug_vertical_flip_p": 0.0,
-    "aug_rotate_limit": 10,
-    "aug_shift_limit": 0.03,
-    "aug_scale_limit": 0.05,
-    "aug_brightness_contrast_p": 0.2,
-    "aug_gaussian_noise_p": 0.30,
-    "aug_gaussian_noise_var_limit": (5.0, 25.0),
-    "aug_clahe_p": 0.10,
-    "aug_clahe_clip_limit": 2.0,
-    "aug_clahe_tile_grid_size": (8, 8),
 
-    # =========================
-    # Weak / strong para unlabeled
-    # =========================
+    # supervisado suave igual al notebook original
+    "aug_horizontal_flip_p": 0.0,
+    "aug_shift_limit": 0.01,
+    "aug_scale_limit": 0.03,
+    "aug_rotate_limit": 5,
+    "aug_brightness_contrast_p": 0.4,
+    "aug_random_gamma_p": 0.2,
+    "aug_random_gamma_limit": (90, 110),
+    "aug_gaussian_noise_p": 0.15,
+    "aug_gaussian_noise_var_limit": (3.0, 12.0),
+    "aug_clahe_p": 0.0,
+
+    # weak / strong semi
     "weak_aug_enable": True,
     "strong_aug_enable": True,
 
-    # =========================
-    # Debug / visualización
-    # =========================
+    # visualización / evaluación
+    "boundary_tol_px": 2,
+    "max_show_preds": 6,
+    "run_ruler_eval": True,
     "debug": False,
     "save_outputs": True,
     "show_examples": True,
@@ -118,10 +123,17 @@ def summarize_config(cfg: dict) -> str:
         "arch",
         "backbone",
         "loss_name",
+        "seed",
+        "batch_size",
+        "num_workers",
+        "drop_last",
+        "num_augmented",
+        "epochs",
+        "lr",
+        "weight_decay",
+        "warmup_epochs",
+        "patience_es",
         "use_semi",
-        "image_preproc",
-        "mask_smoothing",
-        "use_fixed_crop",
         "lambda_u",
         "tau",
         "ema_decay",
@@ -133,9 +145,10 @@ def summarize_config(cfg: dict) -> str:
         "temp_warmup_epochs",
         "tau_temp",
         "max_temp_delta",
-        "batch_size",
-        "epochs",
-        "lr",
+        "image_preproc",
+        "mask_smoothing",
+        "use_fixed_crop",
+        "unlabeled_subdir",
         "eval_threshold",
         "run_ruler_eval",
     ]

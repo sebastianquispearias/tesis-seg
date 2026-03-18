@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from src.preprocessing import preprocess_image_and_mask, pad_to_square
+from src.preprocessing import preprocess_image_and_mask
 
 
 def seed_everything_for_worker(seed: int, worker_id: int) -> None:
@@ -43,26 +43,21 @@ def list_png_files(folder: str | Path) -> List[str]:
 def build_split_paths(cfg: dict, split: str) -> Tuple[str, str]:
     img_root = cfg["img_root"]
     msk_root = cfg["msk_root"]
-
     images_dir = os.path.join(img_root, split, "images")
     masks_dir = os.path.join(msk_root, split, "masks")
     return images_dir, masks_dir
 
 
 def build_unlabeled_path(cfg: dict) -> str:
-    return os.path.join(cfg["img_root"], "unlabeling", "images")
+    subdir = cfg.get("unlabeled_subdir", "unlabeling_r10_max0/images")
+    return os.path.join(cfg["img_root"], subdir)
 
 
 def flatten_collate(batch):
-    """
-    Útil si en algún momento devuelves listas de muestras por imagen.
-    Por ahora también funciona como collate normal.
-    """
     if len(batch) == 0:
         return batch
 
     first = batch[0]
-
     if isinstance(first, list):
         flat = []
         for item in batch:
@@ -80,12 +75,14 @@ class SegmentationDataset(Dataset):
         cfg: dict,
         transform=None,
         split: str = "train",
+        num_augmented: int = 0,
     ):
         self.images_dir = str(images_dir)
         self.masks_dir = str(masks_dir)
         self.cfg = cfg
         self.transform = transform
         self.split = split
+        self.num_augmented = int(num_augmented)
 
         img_files = set(list_png_files(self.images_dir))
         msk_files = set(list_png_files(self.masks_dir))
@@ -101,7 +98,24 @@ class SegmentationDataset(Dataset):
     def __len__(self) -> int:
         return len(self.files)
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+    def _prep(self, image_uint8: np.ndarray, mask_uint8: np.ndarray, fname: str) -> Dict[str, torch.Tensor]:
+        prep = preprocess_image_and_mask(
+            image_uint8=image_uint8,
+            mask_uint8=mask_uint8,
+            target_size=self.cfg["target_size"],
+            use_pad=self.cfg["use_pad"],
+            imagenet_norm=self.cfg["imagenet_norm"],
+            image_preproc=self.cfg["image_preproc"],
+            mask_smoothing=self.cfg["mask_smoothing"],
+            debug=self.cfg.get("debug", False),
+        )
+        return {
+            "image": torch.from_numpy(prep["image"]).float(),
+            "mask": torch.from_numpy(prep["mask"]).float(),
+            "name": fname,
+        }
+
+    def __getitem__(self, idx: int):
         fname = self.files[idx]
 
         img_path = os.path.join(self.images_dir, fname)
@@ -116,36 +130,23 @@ class SegmentationDataset(Dataset):
         if mask is None:
             raise RuntimeError(f"No pude leer máscara: {msk_path}")
 
-        if self.transform is not None:
-            transformed = self.transform(image=image, mask=mask)
-            image = transformed["image"]
-            mask = transformed["mask"]
+        # val/test: una sola vista
+        if self.transform is None or self.num_augmented <= 0:
+            return self._prep(image, mask, fname)
 
-        prep = preprocess_image_and_mask(
-            image_uint8=image,
-            mask_uint8=mask,
-            target_size=self.cfg["target_size"],
-            use_pad=self.cfg["use_pad"],
-            imagenet_norm=self.cfg["imagenet_norm"],
-            image_preproc=self.cfg["image_preproc"],
-            mask_smoothing=self.cfg["mask_smoothing"],
-            debug=self.cfg.get("debug", False),
-        )
+        # train: 1 vista base + N vistas augmentadas
+        samples = [self._prep(image.copy(), mask.copy(), fname)]
 
-        return {
-            "image": torch.from_numpy(prep["image"]).float(),
-            "mask": torch.from_numpy(prep["mask"]).float(),
-            "name": fname,
-        }
+        for _ in range(self.num_augmented):
+            transformed = self.transform(image=image.copy(), mask=mask.copy())
+            aug_img = transformed["image"]
+            aug_mask = transformed["mask"]
+            samples.append(self._prep(aug_img, aug_mask, fname))
+
+        return samples
 
 
 class UnlabeledFramesDataset(Dataset):
-    """
-    Devuelve dos vistas de la misma imagen unlabeled:
-    - weak
-    - strong
-    Luego aplica el mismo preprocesamiento base que en supervisado.
-    """
     def __init__(
         self,
         images_dir: str | Path,
@@ -167,7 +168,6 @@ class UnlabeledFramesDataset(Dataset):
 
     def _preprocess_image_only(self, image_uint8: np.ndarray) -> np.ndarray:
         dummy_mask = np.zeros(image_uint8.shape[:2], dtype=np.uint8)
-
         prep = preprocess_image_and_mask(
             image_uint8=image_uint8,
             mask_uint8=dummy_mask,
@@ -194,7 +194,6 @@ class UnlabeledFramesDataset(Dataset):
 
         if self.weak_tf is not None:
             weak_img = self.weak_tf(image=weak_img)["image"]
-
         if self.strong_tf is not None:
             strong_img = self.strong_tf(image=strong_img)["image"]
 
@@ -209,10 +208,6 @@ class UnlabeledFramesDataset(Dataset):
 
 
 class TemporalUnlabeledPairsDataset(Dataset):
-    """
-    Construye pares (frame_t, frame_t+delta) del mismo video
-    a partir de archivos tipo: v025_f239.png
-    """
     def __init__(
         self,
         images_dir: str | Path,
@@ -241,9 +236,6 @@ class TemporalUnlabeledPairsDataset(Dataset):
         return len(self.pairs)
 
     def _parse_name(self, fname: str) -> Tuple[int, int]:
-        """
-        Espera nombres tipo v025_f239.png
-        """
         base = os.path.splitext(fname)[0]
         vpart, fpart = base.split("_")
         vid = int(vpart[1:])
@@ -265,18 +257,20 @@ class TemporalUnlabeledPairsDataset(Dataset):
                     break
 
                 delta = frame1 - frame0
-                if 1 <= delta <= self.max_delta:
-                    pairs.append((all_files[i], all_files[j]))
-                elif delta > self.max_delta:
-                    break
+                if delta <= 0:
+                    j += 1
+                    continue
 
-                j += 1
+                if delta <= self.max_delta:
+                    pairs.append((all_files[i], all_files[j]))
+                    j += 1
+                else:
+                    break
 
         return pairs
 
     def _preprocess_image_only(self, image_uint8: np.ndarray) -> np.ndarray:
         dummy_mask = np.zeros(image_uint8.shape[:2], dtype=np.uint8)
-
         prep = preprocess_image_and_mask(
             image_uint8=image_uint8,
             mask_uint8=dummy_mask,
@@ -332,6 +326,7 @@ def build_supervised_datasets(cfg: dict, train_tf=None):
         cfg=cfg,
         transform=train_tf,
         split="train",
+        num_augmented=cfg.get("num_augmented", 0),
     )
 
     val_ds = SegmentationDataset(
@@ -340,6 +335,7 @@ def build_supervised_datasets(cfg: dict, train_tf=None):
         cfg=cfg,
         transform=None,
         split="val",
+        num_augmented=0,
     )
 
     test_ds = SegmentationDataset(
@@ -348,6 +344,7 @@ def build_supervised_datasets(cfg: dict, train_tf=None):
         cfg=cfg,
         transform=None,
         split="test",
+        num_augmented=0,
     )
 
     return train_ds, val_ds, test_ds
@@ -394,7 +391,8 @@ def build_dataloaders(
         shuffle=True,
         num_workers=cfg["num_workers"],
         pin_memory=True,
-        drop_last=True,
+        drop_last=cfg.get("drop_last", True),
+        collate_fn=flatten_collate,
         worker_init_fn=seed_worker,
         generator=g,
     )
@@ -406,6 +404,7 @@ def build_dataloaders(
         num_workers=cfg["num_workers"],
         pin_memory=True,
         drop_last=False,
+        collate_fn=flatten_collate,
         worker_init_fn=seed_worker,
         generator=g,
     )
@@ -417,6 +416,7 @@ def build_dataloaders(
         num_workers=cfg["num_workers"],
         pin_memory=True,
         drop_last=False,
+        collate_fn=flatten_collate,
         worker_init_fn=seed_worker,
         generator=g,
     )
