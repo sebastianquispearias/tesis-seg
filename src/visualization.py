@@ -17,6 +17,14 @@ def chw_to_hwc(x: np.ndarray) -> np.ndarray:
     return x
 
 
+def _unwrap_sample(sample):
+    if isinstance(sample, list):
+        if len(sample) == 0:
+            raise ValueError("La muestra es una lista vacía.")
+        return sample[0]
+    return sample
+
+
 def show_dataset_examples(dataset, n: int = 4):
     n = min(n, len(dataset))
     fig, axes = plt.subplots(n, 3, figsize=(10, 4 * n))
@@ -25,7 +33,8 @@ def show_dataset_examples(dataset, n: int = 4):
         axes = np.expand_dims(axes, axis=0)
 
     for i in range(n):
-        sample = dataset[i]
+        sample = _unwrap_sample(dataset[i])
+
         img = sample["image"].numpy()
         msk = sample["mask"].numpy()[0]
 
