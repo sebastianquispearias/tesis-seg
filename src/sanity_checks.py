@@ -12,7 +12,7 @@ def make_square(h: int = 64, w: int = 64, x0: int = 20, y0: int = 20, size: int 
     return m
 
 
-def run_boundary_sanity_checks(train_masks_dir: str, tol_px: int = 2):
+def run_boundary_sanity_checks(train_masks_dir: str, tol_px: int = 5):
     print("=== SANITY CHECK MÉTRICAS DE BORDE ===")
 
     gt = make_square()

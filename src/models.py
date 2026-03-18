@@ -33,5 +33,12 @@ def create_model(arch: str, backbone: str, n_classes: int = 1):
             in_channels=3,
             classes=n_classes,
         )
+    elif arch in ["deeplabv3+", "deeplabv3plus", "deeplabv3"]:
+        return smp.DeepLabV3Plus(
+            encoder_name=backbone,
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=n_classes,
+        )
     else:
         raise ValueError(f"Arquitectura no soportada: {arch}")

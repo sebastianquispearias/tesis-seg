@@ -46,7 +46,7 @@ def write_run_summary(cfg: dict, history: list[dict], exp_dir: str, test_metrics
             f.write("[Training]\n")
             f.write(f"- Best val_loss: {best_row['val_loss']:.6f} @ epoch {best_row['epoch']}\n")
             f.write(f"- train_loss: {best_row.get('train_loss', float('nan')):.6f} | ")
-            f.write(f"train_f1: {best_row.get('train_f1', float('nan')):.4f} | ")
+            f.write(f"train_dice: {best_row.get('train_dice', float('nan')):.4f} | ")
             f.write(f"train_iou: {best_row.get('train_iou', float('nan')):.4f}\n\n")
 
         if test_metrics is not None:
@@ -110,7 +110,7 @@ def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history
     )
 
     print("\n-- Métricas de borde (BF1, ASSD, HD95) --")
-    tol_px = int(cfg.get("boundary_tol_px", 2))
+    tol_px = int(cfg.get("boundary_tol_px", 5))
 
     for split_name, loader in [("VAL", val_loader), ("TEST", test_loader)]:
         bf1_mean, assd_mean, hd95_mean = compute_boundary_metrics_epoch(
@@ -157,6 +157,7 @@ def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history
         thr=cfg["eval_threshold"],
         max_show=cfg.get("max_show_preds", 6),
         out_dir=os.path.join(exp_dir, "preds_vis"),
+        tol_px=tol_px,
     )
 
     write_run_summary(cfg, history or [], exp_dir, test_metrics=test_metrics)

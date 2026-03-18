@@ -76,15 +76,16 @@ def eval_imagewise_and_global(model, loader, device="cuda", thr=0.5, logits=True
 
     iou_g, f1_g = iou_f1_from_counts(TP_all, FP_all, FN_all)
 
-    print(
-        f"[{split_name}] [sample-wise] F1: {f1s.mean():.6f} ± {f1s.std():.6f} | "
-        f"IoU: {ious.mean():.6f} ± {ious.std():.6f}"
-    )
-    print(
-        f"[{split_name}] [global]      F1: {f1_g:.6f} | IoU: {iou_g:.6f}"
-    )
+    print(f"[{split_name}] [amostra]  F1: {f1s.mean():.6f} ± {f1s.std():.6f} | IoU: {ious.mean():.6f} ± {ious.std():.6f}")
+    print(f"[{split_name}] [global]   F1: {f1_g:.6f} | IoU: {iou_g:.6f}")
 
     return {
+        "sample_mean_iou": float(ious.mean()),
+        "sample_mean_f1": float(f1s.mean()),
+        "global_iou": float(iou_g),
+        "global_f1": float(f1_g),
+        "n_images": int(len(ious)),
+        # backward-compat aliases
         "f1_mean": float(f1s.mean()),
         "f1_std": float(f1s.std()),
         "iou_mean": float(ious.mean()),
@@ -161,6 +162,9 @@ def compute_boundary_metrics_epoch(model, loader, device="cuda", thr=0.5, r_tol_
         for i in range(preds.shape[0]):
             pred = to_numpy_bool(preds[i, 0])
             gt = to_numpy_bool(yb[i, 0])
+
+            if not gt.any():
+                continue  # GT vacío → no contribuye a métricas de borde
 
             bf1 = boundary_f1_score(pred, gt, r_tol_px=r_tol_px)
             assd, hd95 = assd_hd95(pred, gt)

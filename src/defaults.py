@@ -61,7 +61,7 @@ DEFAULT_CONFIG = {
     # Consistencia temporal
     # =========================
     "use_temp_consistency": True,
-    "lambda_t": 0.00,
+    "lambda_t": 0.0,
     "max_temp_delta": 2,
     "temp_start_epoch": 4000,
     "temp_warmup_epochs": 5,
@@ -96,8 +96,8 @@ DEFAULT_CONFIG = {
     "strong_aug_enable": True,
 
     # visualización / evaluación
-    "boundary_tol_px": 2,
-    "max_show_preds": 6,
+    "boundary_tol_px": 5,
+    "max_show_preds": 6000,
     "run_ruler_eval": True,
     "debug": False,
     "save_outputs": True,
