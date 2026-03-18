@@ -45,11 +45,5 @@ def clone_model_weights(student, teacher):
 
 @torch.no_grad()
 def update_ema(student, teacher, ema_decay: float = 0.99):
-    sdict = student.state_dict()
-    tdict = teacher.state_dict()
-
-    for k in tdict.keys():
-        if tdict[k].dtype.is_floating_point:
-            tdict[k].mul_(ema_decay).add_(sdict[k], alpha=1.0 - ema_decay)
-        else:
-            tdict[k].copy_(sdict[k])
+    for ps, pt in zip(student.parameters(), teacher.parameters()):
+        pt.data.mul_(ema_decay).add_(ps.data, alpha=1.0 - ema_decay)
