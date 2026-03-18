@@ -60,8 +60,8 @@ DEFAULT_CONFIG = {
     # =========================
     # Consistencia temporal
     # =========================
-    "use_temp_consistency": True,
-    "lambda_t": 0.0,
+    "use_temp_consistency": False,
+    "lambda_t": 0.01,
     "max_temp_delta": 2,
     "temp_start_epoch": 4000,
     "temp_warmup_epochs": 5,
