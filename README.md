@@ -55,7 +55,16 @@ La idea del repo es mantener un notebook principal en Colab para ejecutar el exp
   Dependencias del proyecto.
 
 ---
+## Important experiment context
 
+- Training code lives in `tesis_seg/`
+- Unlabeled pools are generated outside the repo by `prep_unm_unlabeled_new.py`
+- Current temporal pools include r=3 and r=10
+- The training code consumes those folders as unlabeled datasets
+- Planned controls:
+  - semi_std_matched_r3
+  - semi_std_matched_r10
+  
 ## Qué hace el pipeline
 
 1. Monta Drive en Colab.
@@ -133,3 +142,44 @@ Dejar el proyecto ordenado y fácil de revisar, mostrando claramente:
 - cómo funciona la parte semi-supervisada
 - qué métricas se reportan
 - cómo se evalúa la régua automática vs manual
+
+## Current experiment matrix
+
+Main thesis experiments currently planned:
+
+- `supervised`
+- `semi_std_matched_r3`
+- `semi_r3`
+- `semi_std_matched_r10`
+- `semi_r10`
+
+Comparison goals:
+
+- `supervised` vs `semi_std_matched_r3`
+  - asks whether semi-supervision helps in general
+
+- `semi_std_matched_r3` vs `semi_r3`
+  - asks whether temporal-neighbor unlabeled selection helps over a matched random control at r=3 scale
+
+- `semi_std_matched_r10` vs `semi_r10`
+  - asks whether temporal-neighbor unlabeled selection helps over a matched random control at r=10 scale
+
+- `semi_r3` vs `semi_r10`
+  - asks what happens when the temporal neighborhood is widened, which also changes the resulting pool size
+
+Important:
+- these main thesis comparisons are currently run with the temporal branch OFF
+- `use_temp_consistency = False`
+- `lambda_t = 0.0`
+
+## Unlabeled pool creation
+
+Temporal unlabeled pools are created outside `tesis_seg/` by preprocessing scripts in the parent workspace.
+
+Currently available / planned pools:
+- `unlabeling_r3_max0/images`
+- `unlabeling_r10_max0/images`
+- `unlabeling_std_matched_r3/images`
+- `unlabeling_std_matched_r10/images`
+
+The training code only consumes these folders through config/path selection.
