@@ -71,6 +71,8 @@ def write_run_summary(cfg: dict, history: list[dict], exp_dir: str, test_metrics
 @torch.no_grad()
 def export_test_predictions(model, loader, out_dir, device="cuda", thr=0.5):
     os.makedirs(out_dir, exist_ok=True)
+    probs_dir = os.path.join(os.path.dirname(out_dir), "test_probs")
+    os.makedirs(probs_dir, exist_ok=True)
     model.eval()
 
     for batch in loader:
@@ -85,6 +87,10 @@ def export_test_predictions(model, loader, out_dir, device="cuda", thr=0.5):
             pred = preds[i, 0].detach().cpu().numpy().astype(np.uint8) * 255
             save_path = os.path.join(out_dir, names[i])
             cv2.imwrite(save_path, pred)
+
+            prob_map = probs[i, 0].detach().cpu().numpy().astype(np.float32)
+            stem = os.path.splitext(names[i])[0]
+            np.save(os.path.join(probs_dir, f"{stem}.npy"), prob_map)
 
 
 @torch.no_grad()
