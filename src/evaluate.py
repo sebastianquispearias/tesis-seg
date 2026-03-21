@@ -10,7 +10,7 @@ from src.metrics import (
     compute_boundary_metrics_epoch,
     eval_imagewise_and_global,
 )
-from src.ruler_eval import compare_ruler_manual_vs_auto
+from src.ruler_eval import compare_c2c4_manual_vs_auto, visualize_c2c4_comparison
 from src.visualization import show_predictions
 
 
@@ -143,10 +143,17 @@ def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history
     if cfg.get("run_ruler_eval", False):
         rotulos_dir = cfg.get("rotulos_dir", "")
         if rotulos_dir:
-            compare_ruler_manual_vs_auto(
+            compare_c2c4_manual_vs_auto(
                 rotulos_dir=rotulos_dir,
                 pred_masks_dir=test_preds_dir,
-                out_csv=os.path.join(exp_dir, "ruler_compare.csv"),
+                out_csv=os.path.join(exp_dir, "c2c4_comparison.csv"),
+                target_size=cfg.get("target_size", (320, 320)),
+            )
+            visualize_c2c4_comparison(
+                rotulos_dir=rotulos_dir,
+                pred_masks_dir=test_preds_dir,
+                test_images_dir=os.path.join(cfg["img_root"], "test", "images"),
+                out_dir=os.path.join(exp_dir, "c2c4_vis"),
                 target_size=cfg.get("target_size", (320, 320)),
             )
 
