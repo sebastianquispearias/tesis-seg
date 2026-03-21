@@ -183,3 +183,7 @@ Currently available / planned pools:
 - `unlabeling_std_matched_r10/images`
 
 The training code only consumes these folders through config/path selection.
+
+Besides vertebra masks, each annotated image also has an associated manual reference line created previously by another student.
+This line can be treated as a geometric ground-truth segment, whose two endpoints can be used as pseudo-landmarks (e.g. C2-side and C4-side) for downstream geometric evaluation.
+This is important because it may enable a fairer comparison with VFSS works based on cervical landmarks or C2/C4 reference geometry.
