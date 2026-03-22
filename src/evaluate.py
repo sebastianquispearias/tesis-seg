@@ -107,18 +107,43 @@ def write_run_report(
     c2c4_csv = os.path.join(exp_dir, "c2c4_comparison.csv")
     if os.path.isfile(c2c4_csv):
         try:
-            errs = []
+            rows_c24 = []
             with open(c2c4_csv, encoding="utf-8") as f:
-                for row in csv.DictReader(f):
-                    errs.append(float(row["abs_err_px"]))
-            if errs:
-                mean_err = sum(errs) / len(errs)
-                std_err = math.sqrt(sum((e - mean_err) ** 2 for e in errs) / len(errs))
+                reader = csv.DictReader(f)
+                fieldnames_c24 = reader.fieldnames or []
+                has_landmark = "err_c2_px" in fieldnames_c24
+                for row in reader:
+                    entry = {"abs_err_px": float(row["abs_err_px"])}
+                    if has_landmark:
+                        entry["err_c2_px"] = float(row["err_c2_px"])
+                        entry["err_c4_px"] = float(row["err_c4_px"])
+                        entry["err_landmark_mean_px"] = float(row["err_landmark_mean_px"])
+                        entry["err_landmark_max_px"] = float(row["err_landmark_max_px"])
+                        entry["assignment_swapped"] = int(row.get("assignment_swapped", 0))
+                    rows_c24.append(entry)
+            if rows_c24:
+                n = len(rows_c24)
+                mean_abs = sum(r["abs_err_px"] for r in rows_c24) / n
+                std_abs = math.sqrt(sum((r["abs_err_px"] - mean_abs) ** 2 for r in rows_c24) / n)
                 c2c4_summary = {
-                    "n_valid": len(errs),
-                    "mean_abs_err_px": round(mean_err, 3),
-                    "std_abs_err_px": round(std_err, 3),
+                    "n_valid": n,
+                    "mean_abs_err_px": round(mean_abs, 3),
+                    "std_abs_err_px": round(std_abs, 3),
                 }
+                if has_landmark:
+                    thr = 5.0
+                    c2c4_summary.update({
+                        "mean_err_c2_px": round(sum(r["err_c2_px"] for r in rows_c24) / n, 3),
+                        "mean_err_c4_px": round(sum(r["err_c4_px"] for r in rows_c24) / n, 3),
+                        "mean_err_landmark_mean_px": round(sum(r["err_landmark_mean_px"] for r in rows_c24) / n, 3),
+                        "mean_err_landmark_max_px": round(sum(r["err_landmark_max_px"] for r in rows_c24) / n, 3),
+                        "pct_c2_lt5px": round(100.0 * sum(1 for r in rows_c24 if r["err_c2_px"] < thr) / n, 1),
+                        "pct_c4_lt5px": round(100.0 * sum(1 for r in rows_c24 if r["err_c4_px"] < thr) / n, 1),
+                        "pct_both_lt5px": round(
+                            100.0 * sum(1 for r in rows_c24 if r["err_c2_px"] < thr and r["err_c4_px"] < thr) / n, 1
+                        ),
+                        "n_assignment_swapped": sum(r["assignment_swapped"] for r in rows_c24),
+                    })
         except Exception:
             c2c4_summary = None
 
@@ -252,6 +277,7 @@ def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history
         max_show=cfg.get("max_show_preds", 6),
         out_dir=os.path.join(exp_dir, "preds_vis"),
         tol_px=tol_px,
+        c2c4_csv=os.path.join(exp_dir, "c2c4_comparison.csv"),
     )
 
     write_run_summary(cfg, history or [], exp_dir, test_metrics=test_metrics)

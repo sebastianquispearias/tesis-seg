@@ -76,6 +76,40 @@ def line_length(p1, p2):
     return float(np.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2))
 
 
+def _euc(a, b) -> float:
+    return math.hypot(b[0] - a[0], b[1] - a[1])
+
+
+def c2c4_landmark_summary(df) -> dict:
+    """
+    Compute aggregate landmark error statistics from a c2c4_comparison DataFrame.
+    Returns None if df is None or empty.
+    """
+    if df is None or len(df) == 0:
+        return None
+    n = len(df)
+    thr = 5.0
+    summary = {
+        "n_valid": n,
+        "mean_abs_err_px": round(float(df["abs_err_px"].mean()), 3),
+        "std_abs_err_px": round(float(df["abs_err_px"].std()), 3),
+    }
+    if "err_c2_px" in df.columns:
+        summary.update({
+            "mean_err_c2_px": round(float(df["err_c2_px"].mean()), 3),
+            "mean_err_c4_px": round(float(df["err_c4_px"].mean()), 3),
+            "mean_err_landmark_mean_px": round(float(df["err_landmark_mean_px"].mean()), 3),
+            "mean_err_landmark_max_px": round(float(df["err_landmark_max_px"].mean()), 3),
+            "pct_c2_lt5px": round(100.0 * float((df["err_c2_px"] < thr).sum()) / n, 1),
+            "pct_c4_lt5px": round(100.0 * float((df["err_c4_px"] < thr).sum()) / n, 1),
+            "pct_both_lt5px": round(
+                100.0 * float(((df["err_c2_px"] < thr) & (df["err_c4_px"] < thr)).sum()) / n, 1
+            ),
+            "n_assignment_swapped": int(df["assignment_swapped"].sum()) if "assignment_swapped" in df.columns else None,
+        })
+    return summary
+
+
 # ─── Anatomical C2-C4 helpers ─────────────────────────────────────────────────
 
 def _corner_inferior_anterior(mask_u8: np.ndarray):
@@ -246,19 +280,44 @@ def compare_c2c4_manual_vs_auto(
             n_skipped += 1
             continue
 
+        # Direct anatomical matching: p_c2 ↔ p1_man, p_c4 ↔ p2_man
+        err_c2 = _euc(p_c2, p1_man)
+        err_c4 = _euc(p_c4, p2_man)
+        err_lm_mean = (err_c2 + err_c4) / 2.0
+        err_lm_max = max(err_c2, err_c4)
+        # Diagnostic: flag if reversed assignment would have lower total error
+        err_c2_alt = _euc(p_c2, p2_man)
+        err_c4_alt = _euc(p_c4, p1_man)
+        assignment_swapped = 1 if (err_c2_alt + err_c4_alt) < (err_c2 + err_c4) else 0
+
         rows.append({
             "stem": stem,
             "d_gt_px": round(d_gt, 3),
             "d_pred_px": round(d_pred, 3),
             "abs_err_px": round(abs(d_pred - d_gt), 3),
+            "p1_man_x": round(p1_man[0], 3),
+            "p1_man_y": round(p1_man[1], 3),
+            "p2_man_x": round(p2_man[0], 3),
+            "p2_man_y": round(p2_man[1], 3),
             "p_c2_x": p_c2[0],
             "p_c2_y": p_c2[1],
             "p_c4_x": p_c4[0],
             "p_c4_y": p_c4[1],
+            "err_c2_px": round(err_c2, 3),
+            "err_c4_px": round(err_c4, 3),
+            "err_landmark_mean_px": round(err_lm_mean, 3),
+            "err_landmark_max_px": round(err_lm_max, 3),
+            "assignment_swapped": assignment_swapped,
         })
 
     os.makedirs(os.path.dirname(os.path.abspath(out_csv)), exist_ok=True)
-    fieldnames = ["stem", "d_gt_px", "d_pred_px", "abs_err_px", "p_c2_x", "p_c2_y", "p_c4_x", "p_c4_y"]
+    fieldnames = [
+        "stem", "d_gt_px", "d_pred_px", "abs_err_px",
+        "p1_man_x", "p1_man_y", "p2_man_x", "p2_man_y",
+        "p_c2_x", "p_c2_y", "p_c4_x", "p_c4_y",
+        "err_c2_px", "err_c4_px", "err_landmark_mean_px", "err_landmark_max_px",
+        "assignment_swapped",
+    ]
     with open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

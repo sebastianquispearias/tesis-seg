@@ -1,4 +1,6 @@
+import csv
 import os
+import re
 
 import cv2
 import matplotlib.pyplot as plt
@@ -80,9 +82,19 @@ def _to_uint8_rgb(img_float: np.ndarray) -> np.ndarray:
 
 
 @torch.no_grad()
-def show_predictions(model, loader, device="cuda", thr=0.5, max_show=6, out_dir=None, tol_px=5):
+def show_predictions(model, loader, device="cuda", thr=0.5, max_show=6, out_dir=None, tol_px=5, c2c4_csv=None):
     model.eval()
     shown = 0
+
+    # Load C2-C4 lookup dict keyed by stem (optional)
+    c2c4_lookup = {}
+    if c2c4_csv is not None and os.path.isfile(c2c4_csv):
+        try:
+            with open(c2c4_csv, encoding="utf-8") as _f:
+                for _row in csv.DictReader(_f):
+                    c2c4_lookup[_row["stem"]] = _row
+        except Exception:
+            c2c4_lookup = {}
 
     if out_dir is not None:
         os.makedirs(out_dir, exist_ok=True)
@@ -108,6 +120,11 @@ def show_predictions(model, loader, device="cuda", thr=0.5, max_show=6, out_dir=
             img = np.transpose(img, (1, 2, 0))
             if img.ndim == 3 and img.shape[-1] == 1:
                 img = img[..., 0]
+
+            # Case identity
+            stem = os.path.splitext(str(names[i]))[0]
+            m = re.match(r"v(\d+)_f(\d+)", stem)
+            case_label = f"v{m.group(1)} · f{m.group(2)}" if m else stem
 
             # Per-image metrics
             gt_bool = gt.astype(bool)
@@ -139,41 +156,64 @@ def show_predictions(model, loader, device="cuda", thr=0.5, max_show=6, out_dir=
             axs = axs.ravel()
 
             axs[0].imshow(img_vis, cmap=None if img_vis.ndim == 3 else "gray")
-            axs[0].set_title("Imagem")
+            axs[0].set_title("Image")
             axs[0].axis("off")
 
             axs[1].imshow(gt, cmap="gray")
-            axs[1].set_title("GT")
+            axs[1].set_title("GT mask")
             axs[1].axis("off")
 
             im2 = axs[2].imshow(prob_map, vmin=0, vmax=1, cmap="viridis")
-            axs[2].set_title(f"Prob (thr={thr})")
+            axs[2].set_title(f"Prob map (thr={thr})")
             axs[2].axis("off")
             fig.colorbar(im2, ax=axs[2], fraction=0.046, pad=0.04)
 
             axs[3].imshow(pr, cmap="gray")
-            axs[3].set_title("Pred binaria")
+            axs[3].set_title("Pred binary")
             axs[3].axis("off")
 
             axs[4].imshow(overlay)
-            axs[4].set_title("Overlay GT(rojo)+Pred(verde)")
+            axs[4].set_title("Overlay  GT(red) · Pred(green)")
             axs[4].axis("off")
 
+            # Panel 5: C2-C4 overlay (or placeholder if data unavailable)
             axs[5].axis("off")
-            axs[5].text(
-                0.0, 0.9,
-                (
-                    f"F1: {f1_i:.3f}\n"
-                    f"IoU: {iou_i:.3f}\n"
-                    f"BF1@{tol_px}px: {bf1_i:.3f}\n"
-                    f"ASSD: {assd_txt}   HD95: {hd95_txt}"
-                ),
-                fontsize=12, family="monospace", va="top",
-                transform=axs[5].transAxes,
-            )
+            c2c4_row = c2c4_lookup.get(stem)
+            if c2c4_row is not None:
+                try:
+                    p_c2 = (int(float(c2c4_row["p_c2_x"])), int(float(c2c4_row["p_c2_y"])))
+                    p_c4 = (int(float(c2c4_row["p_c4_x"])), int(float(c2c4_row["p_c4_y"])))
+                    c24_overlay = img_u8.copy()
+                    # Tint predicted mask region blue
+                    pr_bool_u8 = pr.astype(bool)
+                    c24_overlay[pr_bool_u8, 2] = np.clip(
+                        c24_overlay[pr_bool_u8, 2].astype(int) // 2 + 100, 0, 255
+                    )
+                    # Auto C2-C4: yellow line, cyan C2, magenta C4
+                    cv2.line(c24_overlay, p_c2, p_c4, (255, 255, 0), 2)
+                    cv2.circle(c24_overlay, p_c2, 5, (0, 255, 255), -1)
+                    cv2.circle(c24_overlay, p_c4, 5, (255, 0, 255), -1)
+                    title5 = "C2●(cyan) C4●(mag)  auto(yellow)"
+                    # Manual reference line (red) if manual points are available
+                    if c2c4_row.get("p1_man_x"):
+                        p1m = (int(float(c2c4_row["p1_man_x"])), int(float(c2c4_row["p1_man_y"])))
+                        p2m = (int(float(c2c4_row["p2_man_x"])), int(float(c2c4_row["p2_man_y"])))
+                        cv2.line(c24_overlay, p1m, p2m, (255, 0, 0), 2)
+                        title5 += "  manual(red)"
+                        if c2c4_row.get("err_landmark_mean_px"):
+                            title5 += f"  lm={float(c2c4_row['err_landmark_mean_px']):.1f}px"
+                    axs[5].imshow(c24_overlay)
+                    axs[5].set_title(title5, fontsize=9)
+                except Exception:
+                    axs[5].text(0.5, 0.5, "C2-C4\n(draw error)", ha="center", va="center",
+                                transform=axs[5].transAxes, color="red", fontsize=10)
+            else:
+                axs[5].text(0.5, 0.5, "C2-C4\nnot available", ha="center", va="center",
+                            transform=axs[5].transAxes, color="gray", fontsize=11)
 
             plt.suptitle(
-                f"F1={f1_i:.3f} | IoU={iou_i:.3f} | BF1@{tol_px}px={bf1_i:.3f} | ASSD={assd_txt} | HD95={hd95_txt}",
+                f"{case_label}  |  F1={f1_i:.3f} | IoU={iou_i:.3f} | "
+                f"BF1@{tol_px}px={bf1_i:.3f} | ASSD={assd_txt} | HD95={hd95_txt}",
                 y=1.02,
             )
 
