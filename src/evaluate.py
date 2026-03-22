@@ -261,13 +261,10 @@ def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history
                 out_csv=os.path.join(exp_dir, "c2c4_comparison.csv"),
                 target_size=cfg.get("target_size", (320, 320)),
             )
-            visualize_c2c4_comparison(
-                rotulos_dir=rotulos_dir,
-                pred_masks_dir=test_preds_dir,
-                test_images_dir=os.path.join(cfg["img_root"], "test", "images"),
-                out_dir=os.path.join(exp_dir, "c2c4_vis"),
-                target_size=cfg.get("target_size", (320, 320)),
-            )
+            # visualize_c2c4_comparison() is intentionally NOT called here.
+            # The C2-C4 overlay is now integrated into the 2x3 prediction figure
+            # (show_predictions panel 5). To generate the standalone 1x3 figures,
+            # call visualize_c2c4_comparison() manually from a notebook cell.
 
     show_predictions(
         model,
