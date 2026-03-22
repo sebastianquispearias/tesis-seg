@@ -1,4 +1,6 @@
 import csv
+import json
+import math
 import os
 
 import cv2
@@ -66,6 +68,85 @@ def write_run_summary(cfg: dict, history: list[dict], exp_dir: str, test_metrics
 
     print("Resumen guardado en:", summary_path)
     return summary_path
+
+
+def write_run_report(
+    cfg: dict,
+    test_metrics: dict,
+    exp_dir: str,
+    history: list | None = None,
+) -> str:
+    """
+    Writes a single portable JSON report for one completed run.
+    Aggregates: config, training summary, test metrics, C2-C4 summary.
+    Always succeeds even if C2-C4 or diagnostic_summary.json are absent.
+    """
+    # --- Run identity ---
+    exp_name = cfg.get("experiment_name", os.path.basename(os.path.dirname(exp_dir)))
+    seed = cfg.get("seed")
+
+    # --- Training summary (prefer diagnostic_summary.json, fallback to history) ---
+    training_summary = None
+    diag_path = os.path.join(exp_dir, "diagnostic_summary.json")
+    if os.path.isfile(diag_path):
+        try:
+            with open(diag_path, encoding="utf-8") as f:
+                training_summary = json.load(f)
+        except Exception:
+            training_summary = None
+    if training_summary is None and history:
+        best_row = max(history, key=lambda r: r.get("val_iou_global", 0.0))
+        training_summary = {
+            "best_epoch": best_row["epoch"],
+            "best_val_iou_global": best_row.get("val_iou_global"),
+            "total_epochs_run": history[-1]["epoch"],
+        }
+
+    # --- C2-C4 summary (null if CSV absent or unreadable) ---
+    c2c4_summary = None
+    c2c4_csv = os.path.join(exp_dir, "c2c4_comparison.csv")
+    if os.path.isfile(c2c4_csv):
+        try:
+            errs = []
+            with open(c2c4_csv, encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    errs.append(float(row["abs_err_px"]))
+            if errs:
+                mean_err = sum(errs) / len(errs)
+                std_err = math.sqrt(sum((e - mean_err) ** 2 for e in errs) / len(errs))
+                c2c4_summary = {
+                    "n_valid": len(errs),
+                    "mean_abs_err_px": round(mean_err, 3),
+                    "std_abs_err_px": round(std_err, 3),
+                }
+        except Exception:
+            c2c4_summary = None
+
+    report = {
+        "run_identity": {
+            "experiment_name": exp_name,
+            "seed": seed,
+            "exp_dir": exp_dir,
+        },
+        "config": cfg,
+        "training_summary": training_summary,
+        "test_metrics": test_metrics,
+        "c2c4_summary": c2c4_summary,
+        "file_references": {
+            "diagnostics_epoch.csv": "diagnostics_epoch.csv",
+            "test_metrics.csv": "test_metrics.csv",
+            "c2c4_comparison.csv": "c2c4_comparison.csv" if c2c4_summary is not None else None,
+            "test_preds": "test_preds/",
+            "test_probs": "test_probs/",
+        },
+    }
+
+    report_name = f"{exp_name}_seed_{seed}_run_report.json"
+    report_path = os.path.join(exp_dir, report_name)
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2, default=str)
+    print(f"Run report saved: {report_path}")
+    return report_path
 
 
 @torch.no_grad()
@@ -174,6 +255,7 @@ def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history
     )
 
     write_run_summary(cfg, history or [], exp_dir, test_metrics=test_metrics)
+    write_run_report(cfg, test_metrics, exp_dir, history=history or [])
 
     return {
         "val_metrics": val_metrics,

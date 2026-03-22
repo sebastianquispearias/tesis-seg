@@ -91,6 +91,14 @@ def run_one_epoch(
     total_lambda_u = 0.0
     total_lambda_t = 0.0
 
+    total_pl_conf_all      = 0.0
+    total_pl_conf_sq_all   = 0.0
+    total_pl_conf_selected = 0.0
+    total_pl_coverage      = 0.0
+    total_pl_pos_frac      = 0.0
+    n_pl_batches           = 0
+    n_pl_selected_batches  = 0
+
     use_semi = bool(
         train and cfg.get("use_semi", False)
         and (unl_loader is not None) and (teacher is not None)
@@ -153,6 +161,17 @@ def run_one_epoch(
                     pseudo = (probs_teacher >= 0.5).float()
                     tau = cfg.get("tau", 0.95)
                     conf_mask = (probs_teacher >= tau) | (probs_teacher <= (1.0 - tau))
+
+                    # per-pixel confidence: max(p, 1-p) — unaffected by class prevalence
+                    conf_pixel = torch.maximum(probs_teacher, 1.0 - probs_teacher)
+                    total_pl_conf_all      += float(conf_pixel.mean())
+                    total_pl_conf_sq_all   += float((conf_pixel ** 2).mean())
+                    total_pl_coverage      += float(conf_mask.float().mean())
+                    total_pl_pos_frac      += float(pseudo.mean())
+                    n_pl_batches           += 1
+                    if conf_mask.any():
+                        total_pl_conf_selected += float(conf_pixel[conf_mask].mean())
+                        n_pl_selected_batches  += 1
 
                 logits_u = model(xs_u)
                 unsup_all = F.binary_cross_entropy_with_logits(logits_u, pseudo, reduction="none")
@@ -265,6 +284,17 @@ def run_one_epoch(
     avg_temp = total_temp / max(n_temp, 1) if n_temp > 0 else 0.0
     avg_lambda_t = total_lambda_t / max(n_temp, 1) if n_temp > 0 else 0.0
 
+    if n_pl_batches > 0:
+        pl_conf_mean_all = total_pl_conf_all / n_pl_batches
+        pl_conf_std_all  = max(0.0, total_pl_conf_sq_all / n_pl_batches - pl_conf_mean_all ** 2) ** 0.5
+        pl_conf_coverage = total_pl_coverage / n_pl_batches
+        pl_pos_frac      = total_pl_pos_frac / n_pl_batches
+    else:
+        pl_conf_mean_all = pl_conf_std_all = pl_conf_coverage = pl_pos_frac = 0.0
+    pl_conf_mean_selected = (
+        total_pl_conf_selected / n_pl_selected_batches if n_pl_selected_batches > 0 else 0.0
+    )
+
     if train:
         lr_cur = optimizer.param_groups[0].get("lr", 0.0)
         print(
@@ -296,6 +326,11 @@ def run_one_epoch(
         "train_iou": avg_iou,
         "lambda_u_t": avg_lambda_u,
         "lambda_t_t": avg_lambda_t,
+        "pl_conf_mean_all": pl_conf_mean_all,
+        "pl_conf_std_all": pl_conf_std_all,
+        "pl_conf_mean_selected": pl_conf_mean_selected,
+        "pl_conf_coverage": pl_conf_coverage,
+        "pl_pos_frac": pl_pos_frac,
     }
 
 
@@ -376,6 +411,21 @@ def run_training(cfg: dict, loaders: dict):
             "train_temp_loss", "train_lambda_t_t",
         ])
     # ──────────────────────────────────────────────────────────────────
+
+    diag_csv = os.path.join(exp_dir, "diagnostics_epoch.csv")
+    with open(diag_csv, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow([
+            "epoch",
+            "train_loss", "train_dice", "train_iou",
+            "val_loss", "val_iou_global", "val_iou_sample", "val_f1_sample",
+            "val_f1_std", "val_iou_std",
+            "bf1_val", "assd_val", "hd95_val",
+            "unsup_loss", "lambda_u_t",
+            "temp_loss", "lambda_t_t",
+            "pl_conf_mean_all", "pl_conf_std_all", "pl_conf_mean_selected",
+            "pl_conf_coverage", "pl_pos_frac",
+            "elapsed_sec",
+        ])
 
     history = []
     best_ckpt_score = -float("inf")
@@ -478,6 +528,21 @@ def run_training(cfg: dict, loaders: dict):
                 train_stats["unsup_loss"], train_stats["lambda_u_t"],
                 train_stats["temp_loss"], train_stats["lambda_t_t"],
             ])
+        with open(diag_csv, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow([
+                epoch,
+                train_stats["loss"], train_stats["train_dice"], train_stats["train_iou"],
+                val_stats["loss"], val_iou_global,
+                val_eval["sample_mean_iou"], val_eval["sample_mean_f1"],
+                val_eval["f1_std"], val_eval["iou_std"],
+                bf1_mean, assd_mean, hd95_mean,
+                train_stats["unsup_loss"], train_stats["lambda_u_t"],
+                train_stats["temp_loss"], train_stats["lambda_t_t"],
+                train_stats["pl_conf_mean_all"], train_stats["pl_conf_std_all"],
+                train_stats["pl_conf_mean_selected"],
+                train_stats["pl_conf_coverage"], train_stats["pl_pos_frac"],
+                dt,
+            ])
         # ──────────────────────────────────────────────────────────────
 
         row = {
@@ -500,6 +565,22 @@ def run_training(cfg: dict, loaders: dict):
 
     print("Mejor score de checkpoint:", best_ckpt_score, "| ckpt:", best_path)
     print("Mejor val_loss observado (solo referencia):", best_val_loss_ref)
+
+    if history:
+        best_row_sum = max(history, key=lambda r: r["val_iou_global"])
+        save_json({
+            "exp_dir": exp_dir,
+            "seed": cfg.get("seed"),
+            "use_semi": cfg.get("use_semi", False),
+            "tau": cfg.get("tau"),
+            "semi_start_epoch": cfg.get("semi_start_epoch"),
+            "semi_warmup_epochs": cfg.get("semi_warmup_epochs"),
+            "lambda_u": cfg.get("lambda_u"),
+            "best_epoch": best_row_sum["epoch"],
+            "best_val_iou_global": best_row_sum["val_iou_global"],
+            "total_epochs_run": history[-1]["epoch"],
+            "early_stopped": epochs_without_improve >= patience_es,
+        }, os.path.join(exp_dir, "diagnostic_summary.json"))
 
     return {
         "model": model,
