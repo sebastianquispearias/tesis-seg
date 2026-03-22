@@ -315,12 +315,13 @@ def visualize_c2c4_comparison(
             continue
         abs_err = abs(d_pred - d_gt)
 
-        # Original test image
+        # Original test image — resized to target_size to match mask coordinate space
         img_path = test_images_dir / f"{stem}.png"
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             n_skipped += 1
             continue
+        img = cv2.resize(img, (target_w, target_h))
 
         # --- Panel 1: mask with C2/C4 dots and connecting line ---
         mask_rgb = cv2.cvtColor(pred, cv2.COLOR_GRAY2RGB)
