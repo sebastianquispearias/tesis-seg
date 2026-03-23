@@ -70,11 +70,49 @@ def write_run_summary(cfg: dict, history: list[dict], exp_dir: str, test_metrics
     return summary_path
 
 
+def _read_boundary_agg(csv_path: str) -> dict | None:
+    """Aggregate per-image boundary CSV (bf1, assd, hd95) into mean±std dict."""
+    if not os.path.isfile(csv_path):
+        return None
+    try:
+        bf1s, assds, hd95s = [], [], []
+        with open(csv_path, encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                bf1s.append(float(row["bf1"]))
+                a, h = float(row["assd"]), float(row["hd95"])
+                if math.isfinite(a):
+                    assds.append(a)
+                if math.isfinite(h):
+                    hd95s.append(h)
+        if not bf1s:
+            return None
+
+        def _ms(lst):
+            if not lst:
+                return None, None
+            m = sum(lst) / len(lst)
+            s = math.sqrt(sum((x - m) ** 2 for x in lst) / len(lst))
+            return round(m, 4), round(s, 4)
+
+        bf1_m, bf1_s = _ms(bf1s)
+        assd_m, assd_s = _ms(assds)
+        hd95_m, hd95_s = _ms(hd95s)
+        return {
+            "n_images": len(bf1s),
+            "bf1_mean": bf1_m, "bf1_std": bf1_s,
+            "assd_mean_px": assd_m, "assd_std_px": assd_s,
+            "hd95_mean_px": hd95_m, "hd95_std_px": hd95_s,
+        }
+    except Exception:
+        return None
+
+
 def write_run_report(
     cfg: dict,
     test_metrics: dict,
     exp_dir: str,
     history: list | None = None,
+    val_metrics: dict | None = None,
 ) -> str:
     """
     Writes a single portable JSON report for one completed run.
@@ -147,6 +185,10 @@ def write_run_report(
         except Exception:
             c2c4_summary = None
 
+    # --- Boundary metrics from per-image CSVs ---
+    test_boundary = _read_boundary_agg(os.path.join(exp_dir, "test_boundary_metrics.csv"))
+    val_boundary  = _read_boundary_agg(os.path.join(exp_dir, "val_boundary_metrics.csv"))
+
     report = {
         "run_identity": {
             "experiment_name": exp_name,
@@ -155,11 +197,16 @@ def write_run_report(
         },
         "config": cfg,
         "training_summary": training_summary,
+        "val_metrics": val_metrics,
         "test_metrics": test_metrics,
+        "test_boundary_metrics": test_boundary,
+        "val_boundary_metrics": val_boundary,
         "c2c4_summary": c2c4_summary,
         "file_references": {
             "diagnostics_epoch.csv": "diagnostics_epoch.csv",
             "test_metrics.csv": "test_metrics.csv",
+            "test_boundary_metrics.csv": "test_boundary_metrics.csv",
+            "val_boundary_metrics.csv": "val_boundary_metrics.csv",
             "c2c4_comparison.csv": "c2c4_comparison.csv" if c2c4_summary is not None else None,
             "test_preds": "test_preds/",
             "test_probs": "test_probs/",
@@ -278,7 +325,7 @@ def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history
     )
 
     write_run_summary(cfg, history or [], exp_dir, test_metrics=test_metrics)
-    write_run_report(cfg, test_metrics, exp_dir, history=history or [])
+    write_run_report(cfg, test_metrics, exp_dir, history=history or [], val_metrics=val_metrics)
 
     return {
         "val_metrics": val_metrics,
