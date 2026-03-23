@@ -2,7 +2,8 @@
 summarize_runs.py
 =================
 Scans all experiment folders under a runs root directory and produces a
-consolidated boundary_metrics_summary.csv.
+consolidated boundary_metrics_summary.csv, then collects all run_report JSON
+files into a central folder for easy review.
 
 Usage (Colab):
     !python summarize_runs.py --runs_root /content/drive/MyDrive/UNM_vertebras_seg_v3/runs
@@ -16,10 +17,11 @@ The script expects folders matching the pattern:
 For each run it looks for:
     test_boundary_metrics.csv  (per-image BF1/ASSD/HD95 for test split)
     val_boundary_metrics.csv   (per-image BF1/ASSD/HD95 for val split)
-    run_report.json            (portable run summary)
+    *_run_report.json          (portable run summary — glob pattern)
 
 Output:
     {runs_root}/boundary_metrics_summary.csv
+    {runs_root}/reports/run_reports/*.json   (collected run_report files)
 """
 
 import argparse
@@ -28,6 +30,7 @@ import json
 import math
 import os
 import re
+import shutil
 from pathlib import Path
 
 
@@ -85,8 +88,7 @@ def scan_run(run_dir: Path, exp_name: str, seed: str) -> list[dict]:
     Always returns a row even if files are absent (status='missing').
     """
     rows = []
-    report_path = run_dir / "run_report.json"
-    has_report = report_path.is_file()
+    has_report = bool(sorted(run_dir.glob("*_run_report.json")))
 
     for split in ("test", "val"):
         csv_path = run_dir / f"{split}_boundary_metrics.csv"
@@ -224,6 +226,24 @@ def main():
             )
     else:
         print("  (no complete test runs found)")
+
+    # ── Collect run_report files into one central folder ─────────────────────
+    reports_dir = runs_root / "reports" / "run_reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    seed_pattern_collect = re.compile(r"^seed_(\d+)$")
+    n_copied = 0
+    for exp_d in sorted(runs_root.iterdir()):
+        if not exp_d.is_dir():
+            continue
+        for seed_d in sorted(exp_d.iterdir()):
+            mc = seed_pattern_collect.match(seed_d.name)
+            if not mc:
+                continue
+            for rpt in sorted(seed_d.glob("*_run_report.json")):
+                shutil.copy2(rpt, reports_dir / rpt.name)
+                n_copied += 1
+
+    print(f"\nCollected {n_copied} run_report file(s) -> {reports_dir}")
 
 
 if __name__ == "__main__":

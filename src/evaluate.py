@@ -107,6 +107,39 @@ def _read_boundary_agg(csv_path: str) -> dict | None:
         return None
 
 
+def _read_best_epoch_stats(exp_dir: str) -> tuple[dict | None, dict | None]:
+    """
+    Read diagnostics_epoch.csv, find the row with the highest val_iou_global,
+    and return (pl_stats_at_best_epoch, val_boundary_at_best_epoch).
+    Both are None if the file is absent, unreadable, or columns are missing.
+    """
+    path = os.path.join(exp_dir, "diagnostics_epoch.csv")
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        with open(path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        if not rows:
+            return None, None
+        best = max(rows, key=lambda r: float(r.get("val_iou_global", 0)))
+
+        pl_keys = ["pl_conf_mean_all", "pl_conf_std_all",
+                   "pl_conf_mean_selected", "pl_conf_coverage", "pl_pos_frac"]
+        pl_stats = (
+            {k: float(best[k]) for k in pl_keys}
+            if all(k in best for k in pl_keys) else None
+        )
+
+        bnd_keys = ["bf1_val", "assd_val", "hd95_val"]
+        bnd_stats = (
+            {k: float(best[k]) for k in bnd_keys if k in best}
+            if any(k in best for k in bnd_keys) else None
+        )
+        return pl_stats, bnd_stats
+    except Exception:
+        return None, None
+
+
 def write_run_report(
     cfg: dict,
     test_metrics: dict,
@@ -189,6 +222,9 @@ def write_run_report(
     test_boundary = _read_boundary_agg(os.path.join(exp_dir, "test_boundary_metrics.csv"))
     val_boundary  = _read_boundary_agg(os.path.join(exp_dir, "val_boundary_metrics.csv"))
 
+    # --- Best-epoch pseudo-label stats and val boundary from diagnostics_epoch.csv ---
+    pl_stats_at_best, val_boundary_at_best = _read_best_epoch_stats(exp_dir)
+
     report = {
         "run_identity": {
             "experiment_name": exp_name,
@@ -201,6 +237,8 @@ def write_run_report(
         "test_metrics": test_metrics,
         "test_boundary_metrics": test_boundary,
         "val_boundary_metrics": val_boundary,
+        "val_boundary_at_best_epoch": val_boundary_at_best,
+        "pl_stats_at_best_epoch": pl_stats_at_best,
         "c2c4_summary": c2c4_summary,
         "file_references": {
             "diagnostics_epoch.csv": "diagnostics_epoch.csv",
