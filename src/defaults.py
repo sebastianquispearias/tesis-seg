@@ -95,6 +95,9 @@ DEFAULT_CONFIG = {
     "weak_aug_enable": True,
     "strong_aug_enable": True,
 
+    # label-fraction ablation (None = use all labeled frames)
+    "labeled_subset_file": None,
+
     # visualización / evaluación
     "boundary_tol_px": 5,
     "max_show_preds": 6000,

@@ -88,6 +88,13 @@ class SegmentationDataset(Dataset):
         msk_files = set(list_png_files(self.masks_dir))
         self.files = sorted(list(img_files & msk_files))
 
+        # Optional labeled-subset filter for label-fraction ablation (train only)
+        _subset_file = cfg.get("labeled_subset_file") if split == "train" else None
+        if _subset_file:
+            from pathlib import Path as _Path
+            _allowed = set(_Path(_subset_file).read_text(encoding="utf-8").split())
+            self.files = [f for f in self.files if _Path(f).stem in _allowed]
+
         if len(self.files) == 0:
             raise RuntimeError(
                 f"No se encontraron pares imagen-máscara en:\n"
