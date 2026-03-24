@@ -154,30 +154,36 @@ def run_one_epoch(
                 xs_u = ubatch["strong_image"].to(device, non_blocking=True).float()
                 bs_u = xs_u.size(0)
 
+                ssl_method = cfg.get("ssl_method", "pseudo_label")
+
                 with torch.no_grad():
                     logits_teacher = teacher(xw_u)
                     probs_teacher = torch.sigmoid(logits_teacher)
 
-                    pseudo = (probs_teacher >= 0.5).float()
-                    tau = cfg.get("tau", 0.95)
-                    conf_mask = (probs_teacher >= tau) | (probs_teacher <= (1.0 - tau))
+                    if ssl_method == "pseudo_label":
+                        pseudo = (probs_teacher >= 0.5).float()
+                        tau = cfg.get("tau", 0.95)
+                        conf_mask = (probs_teacher >= tau) | (probs_teacher <= (1.0 - tau))
 
-                    # per-pixel confidence: max(p, 1-p) — unaffected by class prevalence
-                    conf_pixel = torch.maximum(probs_teacher, 1.0 - probs_teacher)
-                    total_pl_conf_all      += float(conf_pixel.mean())
-                    total_pl_conf_sq_all   += float((conf_pixel ** 2).mean())
-                    total_pl_coverage      += float(conf_mask.float().mean())
-                    total_pl_pos_frac      += float(pseudo.mean())
-                    n_pl_batches           += 1
-                    if conf_mask.any():
-                        total_pl_conf_selected += float(conf_pixel[conf_mask].mean())
-                        n_pl_selected_batches  += 1
+                        # per-pixel confidence: max(p, 1-p) — unaffected by class prevalence
+                        conf_pixel = torch.maximum(probs_teacher, 1.0 - probs_teacher)
+                        total_pl_conf_all      += float(conf_pixel.mean())
+                        total_pl_conf_sq_all   += float((conf_pixel ** 2).mean())
+                        total_pl_coverage      += float(conf_mask.float().mean())
+                        total_pl_pos_frac      += float(pseudo.mean())
+                        n_pl_batches           += 1
+                        if conf_mask.any():
+                            total_pl_conf_selected += float(conf_pixel[conf_mask].mean())
+                            n_pl_selected_batches  += 1
 
                 logits_u = model(xs_u)
-                unsup_all = F.binary_cross_entropy_with_logits(logits_u, pseudo, reduction="none")
-
-                if conf_mask.any():
-                    unsup_loss = (unsup_all * conf_mask.float()).sum() / conf_mask.float().sum()
+                if ssl_method == "mean_teacher":
+                    probs_student = torch.sigmoid(logits_u)
+                    unsup_loss = F.mse_loss(probs_student, probs_teacher.detach())
+                else:  # pseudo_label (default)
+                    unsup_all = F.binary_cross_entropy_with_logits(logits_u, pseudo, reduction="none")
+                    if conf_mask.any():
+                        unsup_loss = (unsup_all * conf_mask.float()).sum() / conf_mask.float().sum()
 
                 lambda_u_t = _ramp_weight(
                     epoch=epoch,

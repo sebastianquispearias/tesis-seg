@@ -56,6 +56,7 @@ DEFAULT_CONFIG = {
     "ema_decay": 0.99,
     "semi_start_epoch": 30,
     "semi_warmup_epochs": 20,
+    "ssl_method": "pseudo_label",  # "pseudo_label" or "mean_teacher"
 
     # =========================
     # Consistencia temporal
@@ -142,6 +143,7 @@ def summarize_config(cfg: dict) -> str:
         "ema_decay",
         "semi_start_epoch",
         "semi_warmup_epochs",
+        "ssl_method",
         "use_temp_consistency",
         "lambda_t",
         "temp_start_epoch",
