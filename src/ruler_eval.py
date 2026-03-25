@@ -132,7 +132,7 @@ def _corner_inferior_anterior(mask_u8: np.ndarray):
     return best
 
 
-def c2_c4_from_mask(
+def c2_c4_from_mask_legacy(
     mask_bin: np.ndarray,
     min_pixels: int = 80,
     n_samples: int = 120,
@@ -142,6 +142,7 @@ def c2_c4_from_mask(
 ):
     """
     Anatomical C2-C4 approximation via PCA + inter-vertebral gap detection.
+    Kept for reference/debugging. Use c2_c4_from_mask() for new code.
 
     1) PCA on all mask pixels → principal axis.
     2) Build 1D profile f(t): pixel count in a slab perpendicular to the axis.
@@ -233,6 +234,77 @@ def c2_c4_from_mask(
     if p2 is None or p4 is None:
         return None, None, None
     return p2, p4, float(math.hypot(p4[0] - p2[0], p4[1] - p2[1]))
+
+
+def c2_c4_from_mask(
+    mask_bin: np.ndarray,
+    min_pixels: int = 80,
+    n_samples: int = 120,           # unused; kept for signature compatibility
+    slab_half_thickness: float = 2.0,  # unused
+    valley_alpha: float = 0.3,         # unused
+    n_bands_fallback: int = 4,         # unused
+):
+    """
+    Direct-geometry C2-C4 landmark detection.
+
+    1) Binarize mask; keep largest connected component.
+    2) Extract external contour points.
+    3) Split into C2 zone (top 33%) and C4 zone (bottom 33%) by y-coordinate.
+    4) Select infero-anterior corner in each zone via score = x - 0.5*y (minimum).
+    5) Anatomical sanity: ensure C2 is above C4 (smaller y).
+
+    Returns (p_c2, p_c4, distance_px) on success, (None, None, None) on failure.
+    Point coordinates are integer (x, y) tuples.
+    """
+    mask_u8 = (mask_bin > 0).astype(np.uint8)
+
+    # Largest connected component
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask_u8)
+    if n_labels < 2:
+        return None, None, None
+    fg_areas = stats[1:, cv2.CC_STAT_AREA]
+    largest_label = int(np.argmax(fg_areas)) + 1  # +1: skip background (label 0)
+
+    if stats[largest_label, cv2.CC_STAT_AREA] < min_pixels:
+        return None, None, None
+
+    comp_mask = (labels == largest_label).astype(np.uint8)
+
+    # External contour
+    contours, _ = cv2.findContours(comp_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        return None, None, None
+
+    # All contour points as (x, y), shape (N, 2)
+    pts = np.concatenate([c.reshape(-1, 2) for c in contours], axis=0)
+
+    y_min = int(pts[:, 1].min())
+    y_max = int(pts[:, 1].max())
+    span = y_max - y_min
+    if span < 1:
+        return None, None, None
+
+    # Zone masks
+    c2_zone = pts[:, 1] <= y_min + 0.33 * span
+    c4_zone = pts[:, 1] >= y_min + 0.67 * span
+    if not c2_zone.any() or not c4_zone.any():
+        return None, None, None
+
+    # Infero-anterior corner: minimum of score = x - 0.5*y
+    scores = pts[:, 0].astype(float) - 0.5 * pts[:, 1].astype(float)
+    c2_pts = pts[c2_zone]
+    c4_pts = pts[c4_zone]
+    idx_c2 = int(np.argmin(scores[c2_zone]))
+    idx_c4 = int(np.argmin(scores[c4_zone]))
+    p_c2 = (int(c2_pts[idx_c2, 0]), int(c2_pts[idx_c2, 1]))
+    p_c4 = (int(c4_pts[idx_c4, 0]), int(c4_pts[idx_c4, 1]))
+
+    # Anatomical sanity: C2 must be above C4 (smaller y)
+    if p_c2[1] > p_c4[1]:
+        p_c2, p_c4 = p_c4, p_c2
+
+    dist = float(math.hypot(p_c4[0] - p_c2[0], p_c4[1] - p_c2[1]))
+    return p_c2, p_c4, dist
 
 
 # ─── C2-C4 comparison and visualization ──────────────────────────────────────
