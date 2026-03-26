@@ -10,3 +10,4 @@ torchvision==0.17.1
 segmentation-models-pytorch==0.3.3
 scipy
 tqdm
+ml_collections
