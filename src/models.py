@@ -40,6 +40,9 @@ def create_model(arch: str, backbone: str, n_classes: int = 1):
             in_channels=3,
             classes=n_classes,
         )
+    elif arch == "bifpn_unet":
+        from src.bifpn_unet import BiFPNUNet
+        return BiFPNUNet(in_channels=3, n_classes=n_classes)
     elif arch == "transunet":
         import os
         import numpy as np
