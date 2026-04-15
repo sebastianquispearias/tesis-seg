@@ -12,8 +12,12 @@ from src.metrics import (
     compute_boundary_metrics_epoch,
     eval_imagewise_and_global,
 )
-from src.ruler_eval import compare_c2c4_manual_vs_auto, visualize_c2c4_comparison
-from src.visualization import show_predictions
+
+# ruler_eval and visualization import matplotlib at module load, which breaks
+# any environment where matplotlib is unavailable or incompatible. Those
+# functions are only needed inside evaluate_checkpoint(); write_run_report()
+# and friends do not touch them. Import lazily so refresh_run_reports.py and
+# any headless consumer of write_run_report() can run without matplotlib.
 
 
 def write_simple_metrics_csv(path: str, metrics: dict):
@@ -633,6 +637,11 @@ def export_test_predictions(model, loader, out_dir, device="cuda", thr=0.5):
 
 @torch.no_grad()
 def evaluate_checkpoint(cfg: dict, model, loaders: dict, best_path: str, history: list[dict] | None = None):
+    # Lazy imports: keep matplotlib/visualization out of the top-level import
+    # graph so write_run_report() and refresh_run_reports.py can run headless.
+    from src.ruler_eval import compare_c2c4_manual_vs_auto
+    from src.visualization import show_predictions
+
     device = cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu")
     exp_dir = cfg["exp_dir"]
 
