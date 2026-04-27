@@ -542,6 +542,7 @@ def run_training(cfg: dict, loaders: dict):
             "cps_loss_A", "cps_loss_B", "sup_loss_B",
             "pseudo_agree", "pseudo_agree_fg", "pseudo_A_pos", "pseudo_B_pos",
             "val_iou_B",
+            "lr_A", "lr_B",
         ])
 
     history = []
@@ -682,6 +683,8 @@ def run_training(cfg: dict, loaders: dict):
                 train_stats["pseudo_agree"], train_stats["pseudo_agree_fg"],
                 train_stats["pseudo_A_pos"], train_stats["pseudo_B_pos"],
                 val_iou_B,
+                optimizer.param_groups[0].get("lr", 0.0),
+                optimizer_B.param_groups[0].get("lr", 0.0) if optimizer_B is not None else 0.0,
             ])
         # ──────────────────────────────────────────────────────────────
 
