@@ -106,7 +106,8 @@ def run_one_epoch(
     total_cps_loss_A   = 0.0
     total_cps_loss_B   = 0.0
     total_sup_loss_B   = 0.0
-    total_pseudo_agree = 0.0
+    total_pseudo_agree    = 0.0
+    total_pseudo_agree_fg = 0.0
     total_pseudo_A_pos = 0.0
     total_pseudo_B_pos = 0.0
     n_cps_batches      = 0
@@ -188,6 +189,12 @@ def run_one_epoch(
                         pseudo_B = (torch.sigmoid(logits_B_u) >= 0.5).float()
                         # CPS diagnostics
                         total_pseudo_agree += float((pseudo_A == pseudo_B).float().mean())
+                        # Foreground-only agreement (meaningful for imbalanced segmentation)
+                        fg_mask = pseudo_A.bool() | pseudo_B.bool()
+                        if fg_mask.any():
+                            total_pseudo_agree_fg += float((pseudo_A[fg_mask] == pseudo_B[fg_mask]).float().mean())
+                        else:
+                            total_pseudo_agree_fg += 1.0
                         total_pseudo_A_pos += float(pseudo_A.mean())
                         total_pseudo_B_pos += float(pseudo_B.mean())
                         n_cps_batches += 1
@@ -377,6 +384,7 @@ def run_one_epoch(
                 f"loss_B={total_cps_loss_B / n_cps_batches:.6f}  "
                 f"sup_B={total_sup_loss_B / max(n_samples, 1):.6f}  "
                 f"agree={total_pseudo_agree / n_cps_batches:.4f}  "
+                f"agree_fg={total_pseudo_agree_fg / n_cps_batches:.4f}  "
                 f"pos_A={total_pseudo_A_pos / n_cps_batches:.4f}  "
                 f"pos_B={total_pseudo_B_pos / n_cps_batches:.4f}  "
                 f"lr_B={lr_B:.6f}"
@@ -387,6 +395,7 @@ def run_one_epoch(
     avg_cps_loss_B  = total_cps_loss_B / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
     avg_sup_loss_B  = total_sup_loss_B / max(n_samples, 1) if is_cps else 0.0
     avg_pseudo_agree = total_pseudo_agree / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
+    avg_pseudo_agree_fg = total_pseudo_agree_fg / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
     avg_pseudo_A_pos = total_pseudo_A_pos / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
     avg_pseudo_B_pos = total_pseudo_B_pos / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
 
@@ -408,6 +417,7 @@ def run_one_epoch(
         "cps_loss_B": avg_cps_loss_B,
         "sup_loss_B": avg_sup_loss_B,
         "pseudo_agree": avg_pseudo_agree,
+        "pseudo_agree_fg": avg_pseudo_agree_fg,
         "pseudo_A_pos": avg_pseudo_A_pos,
         "pseudo_B_pos": avg_pseudo_B_pos,
     }
@@ -530,7 +540,7 @@ def run_training(cfg: dict, loaders: dict):
             "pl_conf_coverage", "pl_pos_frac",
             "elapsed_sec",
             "cps_loss_A", "cps_loss_B", "sup_loss_B",
-            "pseudo_agree", "pseudo_A_pos", "pseudo_B_pos",
+            "pseudo_agree", "pseudo_agree_fg", "pseudo_A_pos", "pseudo_B_pos",
             "val_iou_B",
         ])
 
@@ -669,8 +679,8 @@ def run_training(cfg: dict, loaders: dict):
                 dt,
                 train_stats["cps_loss_A"], train_stats["cps_loss_B"],
                 train_stats["sup_loss_B"],
-                train_stats["pseudo_agree"], train_stats["pseudo_A_pos"],
-                train_stats["pseudo_B_pos"],
+                train_stats["pseudo_agree"], train_stats["pseudo_agree_fg"],
+                train_stats["pseudo_A_pos"], train_stats["pseudo_B_pos"],
                 val_iou_B,
             ])
         # ──────────────────────────────────────────────────────────────
