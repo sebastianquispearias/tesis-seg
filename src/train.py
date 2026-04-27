@@ -694,6 +694,7 @@ def run_training(cfg: dict, loaders: dict):
             "val_f1": val_eval["sample_mean_f1"],
             "val_iou": val_eval["sample_mean_iou"],
             "val_iou_global": val_iou_global,
+            "val_iou_B": val_iou_B,
             "bf1_val": bf1_mean,
             "elapsed_sec": dt,
         }
@@ -711,6 +712,7 @@ def run_training(cfg: dict, loaders: dict):
         save_json({
             "exp_dir": exp_dir,
             "seed": cfg.get("seed"),
+            "ssl_method": cfg.get("ssl_method", "pseudo_label"),
             "use_semi": cfg.get("use_semi", False),
             "tau": cfg.get("tau"),
             "semi_start_epoch": cfg.get("semi_start_epoch"),
@@ -718,6 +720,7 @@ def run_training(cfg: dict, loaders: dict):
             "lambda_u": cfg.get("lambda_u"),
             "best_epoch": best_row_sum["epoch"],
             "best_val_iou_global": best_row_sum["val_iou_global"],
+            "best_val_iou_B": best_row_sum.get("val_iou_B"),
             "total_epochs_run": history[-1]["epoch"],
             "early_stopped": epochs_without_improve >= patience_es,
         }, os.path.join(exp_dir, "diagnostic_summary.json"))

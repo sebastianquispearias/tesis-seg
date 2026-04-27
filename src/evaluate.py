@@ -111,20 +111,20 @@ def _read_boundary_agg(csv_path: str) -> dict | None:
         return None
 
 
-def _read_best_epoch_stats(exp_dir: str) -> tuple[dict | None, dict | None]:
+def _read_best_epoch_stats(exp_dir: str) -> tuple[dict | None, dict | None, dict | None]:
     """
     Read diagnostics_epoch.csv, find the row with the highest val_iou_global,
-    and return (pl_stats_at_best_epoch, val_boundary_at_best_epoch).
-    Both are None if the file is absent, unreadable, or columns are missing.
+    and return (pl_stats_at_best_epoch, val_boundary_at_best_epoch, cps_stats_at_best_epoch).
+    All are None if the file is absent, unreadable, or columns are missing.
     """
     path = os.path.join(exp_dir, "diagnostics_epoch.csv")
     if not os.path.isfile(path):
-        return None, None
+        return None, None, None
     try:
         with open(path, encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
         if not rows:
-            return None, None
+            return None, None, None
         best = max(rows, key=lambda r: float(r.get("val_iou_global", 0)))
 
         pl_keys = ["pl_conf_mean_all", "pl_conf_std_all",
@@ -139,9 +139,23 @@ def _read_best_epoch_stats(exp_dir: str) -> tuple[dict | None, dict | None]:
             {k: float(best[k]) for k in bnd_keys if k in best}
             if any(k in best for k in bnd_keys) else None
         )
-        return pl_stats, bnd_stats
+
+        # CPS stats at best epoch
+        cps_keys = ["cps_loss_A", "cps_loss_B", "sup_loss_B",
+                     "pseudo_agree", "pseudo_agree_fg",
+                     "pseudo_A_pos", "pseudo_B_pos", "val_iou_B"]
+        cps_stats = None
+        if "cps_loss_A" in best:
+            cps_val = _safe_float(best.get("cps_loss_A"))
+            if cps_val is not None and cps_val > 0:
+                cps_stats = {}
+                for k in cps_keys:
+                    if k in best:
+                        cps_stats[k] = _safe_float(best[k])
+
+        return pl_stats, bnd_stats, cps_stats
     except Exception:
-        return None, None
+        return None, None, None
 
 
 def _safe_float(v):
@@ -564,8 +578,8 @@ def write_run_report(
     test_boundary = _read_boundary_agg(os.path.join(exp_dir, "test_boundary_metrics.csv"))
     val_boundary  = _read_boundary_agg(os.path.join(exp_dir, "val_boundary_metrics.csv"))
 
-    # --- Best-epoch pseudo-label stats and val boundary from diagnostics_epoch.csv ---
-    pl_stats_at_best, val_boundary_at_best = _read_best_epoch_stats(exp_dir)
+    # --- Best-epoch pseudo-label stats, val boundary, and CPS stats from diagnostics_epoch.csv ---
+    pl_stats_at_best, val_boundary_at_best, cps_stats_at_best = _read_best_epoch_stats(exp_dir)
 
     # --- Epoch history (read once, reused by ssl_interpretation and diag summary) ---
     epoch_history = _read_epoch_history(exp_dir, cfg.get("use_semi"))
@@ -575,6 +589,7 @@ def write_run_report(
             "experiment_name": exp_name,
             "seed": seed,
             "exp_dir": exp_dir,
+            "ssl_method": cfg.get("ssl_method", "pseudo_label"),
         },
         "config": cfg,
         "training_summary": training_summary,
@@ -584,6 +599,7 @@ def write_run_report(
         "val_boundary_metrics": val_boundary,
         "val_boundary_at_best_epoch": val_boundary_at_best,
         "pl_stats_at_best_epoch": pl_stats_at_best,
+        "cps_stats_at_best_epoch": cps_stats_at_best,
         "c2c4_summary": c2c4_summary,
         "file_references": {
             "diagnostics_epoch.csv": "diagnostics_epoch.csv",
