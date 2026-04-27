@@ -2,7 +2,7 @@ import csv
 import math
 import os
 import time
-
+    
 import torch
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
@@ -75,8 +75,11 @@ def run_one_epoch(
     unl_loader=None,
     temp_loader=None,
     log_every: int = 10,
+    optimizer_B=None,
 ):
     cfg = cfg or {}
+    ssl_method = cfg.get("ssl_method", "pseudo_label")
+    is_cps = ssl_method == "cps"
     model.train(train)
 
     total_loss = 0.0
@@ -99,6 +102,15 @@ def run_one_epoch(
     n_pl_batches           = 0
     n_pl_selected_batches  = 0
 
+    # CPS diagnostics
+    total_cps_loss_A   = 0.0
+    total_cps_loss_B   = 0.0
+    total_sup_loss_B   = 0.0
+    total_pseudo_agree = 0.0
+    total_pseudo_A_pos = 0.0
+    total_pseudo_B_pos = 0.0
+    n_cps_batches      = 0
+
     use_semi = bool(
         train and cfg.get("use_semi", False)
         and (unl_loader is not None) and (teacher is not None)
@@ -110,8 +122,11 @@ def run_one_epoch(
     unl_iter = iter(unl_loader) if use_semi else None
     temp_iter = iter(temp_loader) if use_temp else None
 
-    if use_semi:
+    # PL/MT: teacher in eval mode; CPS: model_B in train mode
+    if use_semi and not is_cps:
         teacher.eval()
+    if train and is_cps and teacher is not None:
+        teacher.train()
 
     if train:
         print(f"\n=== Epoch {epoch}/{cfg.get('epochs', '?')} ===")
@@ -131,11 +146,20 @@ def run_one_epoch(
 
         if train:
             optimizer.zero_grad(set_to_none=True)
+            if is_cps and optimizer_B is not None:
+                optimizer_B.zero_grad(set_to_none=True)
 
         with torch.set_grad_enabled(train):
             logits = model(xb)
             sup_loss, components = criterion(logits, yb, epoch=epoch)
             loss = sup_loss
+
+            # CPS: model_B supervised forward on labeled batch (from epoch 0)
+            if is_cps and teacher is not None:
+                logits_B_sup = teacher(xb)
+                sup_loss_B, _ = criterion(logits_B_sup, yb, epoch=epoch)
+                loss = loss + sup_loss_B
+                total_sup_loss_B += float(sup_loss_B.detach()) * bs
 
             unsup_loss = torch.zeros((), device=device)
             temp_loss = torch.zeros((), device=device)
@@ -154,36 +178,59 @@ def run_one_epoch(
                 xs_u = ubatch["strong_image"].to(device, non_blocking=True).float()
                 bs_u = xs_u.size(0)
 
-                ssl_method = cfg.get("ssl_method", "pseudo_label")
+                if is_cps:
+                    # === CPS: cross pseudo supervision on UNLABELED batch ===
+                    logits_A_u = model(xs_u)       # model_A forward on strong-augmented unlabeled
+                    logits_B_u = teacher(xs_u)      # model_B forward on strong-augmented unlabeled
 
-                with torch.no_grad():
-                    logits_teacher = teacher(xw_u)
-                    probs_teacher = torch.sigmoid(logits_teacher)
+                    with torch.no_grad():
+                        pseudo_A = (torch.sigmoid(logits_A_u) >= 0.5).float()
+                        pseudo_B = (torch.sigmoid(logits_B_u) >= 0.5).float()
+                        # CPS diagnostics
+                        total_pseudo_agree += float((pseudo_A == pseudo_B).float().mean())
+                        total_pseudo_A_pos += float(pseudo_A.mean())
+                        total_pseudo_B_pos += float(pseudo_B.mean())
+                        n_cps_batches += 1
 
-                    if ssl_method == "pseudo_label":
-                        pseudo = (probs_teacher >= 0.5).float()
-                        tau = cfg.get("tau", 0.95)
-                        conf_mask = (probs_teacher >= tau) | (probs_teacher <= (1.0 - tau))
+                    cps_loss_A = F.binary_cross_entropy_with_logits(logits_A_u, pseudo_B)
+                    cps_loss_B = F.binary_cross_entropy_with_logits(logits_B_u, pseudo_A)
+                    unsup_loss = 0.5 * (cps_loss_A + cps_loss_B)
 
-                        # per-pixel confidence: max(p, 1-p) — unaffected by class prevalence
-                        conf_pixel = torch.maximum(probs_teacher, 1.0 - probs_teacher)
-                        total_pl_conf_all      += float(conf_pixel.mean())
-                        total_pl_conf_sq_all   += float((conf_pixel ** 2).mean())
-                        total_pl_coverage      += float(conf_mask.float().mean())
-                        total_pl_pos_frac      += float(pseudo.mean())
-                        n_pl_batches           += 1
+                    total_cps_loss_A += float(cps_loss_A.detach())
+                    total_cps_loss_B += float(cps_loss_B.detach())
+
+                else:
+                    # === PL / MT branch (unchanged) ===
+                    ssl_method_local = cfg.get("ssl_method", "pseudo_label")
+
+                    with torch.no_grad():
+                        logits_teacher = teacher(xw_u)
+                        probs_teacher = torch.sigmoid(logits_teacher)
+
+                        if ssl_method_local == "pseudo_label":
+                            pseudo = (probs_teacher >= 0.5).float()
+                            tau = cfg.get("tau", 0.95)
+                            conf_mask = (probs_teacher >= tau) | (probs_teacher <= (1.0 - tau))
+
+                            # per-pixel confidence: max(p, 1-p) — unaffected by class prevalence
+                            conf_pixel = torch.maximum(probs_teacher, 1.0 - probs_teacher)
+                            total_pl_conf_all      += float(conf_pixel.mean())
+                            total_pl_conf_sq_all   += float((conf_pixel ** 2).mean())
+                            total_pl_coverage      += float(conf_mask.float().mean())
+                            total_pl_pos_frac      += float(pseudo.mean())
+                            n_pl_batches           += 1
+                            if conf_mask.any():
+                                total_pl_conf_selected += float(conf_pixel[conf_mask].mean())
+                                n_pl_selected_batches  += 1
+
+                    logits_u = model(xs_u)
+                    if ssl_method_local == "mean_teacher":
+                        probs_student = torch.sigmoid(logits_u)
+                        unsup_loss = F.mse_loss(probs_student, probs_teacher.detach())
+                    else:  # pseudo_label (default)
+                        unsup_all = F.binary_cross_entropy_with_logits(logits_u, pseudo, reduction="none")
                         if conf_mask.any():
-                            total_pl_conf_selected += float(conf_pixel[conf_mask].mean())
-                            n_pl_selected_batches  += 1
-
-                logits_u = model(xs_u)
-                if ssl_method == "mean_teacher":
-                    probs_student = torch.sigmoid(logits_u)
-                    unsup_loss = F.mse_loss(probs_student, probs_teacher.detach())
-                else:  # pseudo_label (default)
-                    unsup_all = F.binary_cross_entropy_with_logits(logits_u, pseudo, reduction="none")
-                    if conf_mask.any():
-                        unsup_loss = (unsup_all * conf_mask.float()).sum() / conf_mask.float().sum()
+                            unsup_loss = (unsup_all * conf_mask.float()).sum() / conf_mask.float().sum()
 
                 lambda_u_t = _ramp_weight(
                     epoch=epoch,
@@ -241,8 +288,9 @@ def run_one_epoch(
             if train:
                 loss.backward()
                 optimizer.step()
-
-                if use_semi:
+                if is_cps and optimizer_B is not None:
+                    optimizer_B.step()
+                if use_semi and not is_cps:
                     update_ema(model, teacher, ema_decay=cfg.get("ema_decay", 0.99))
 
         # Inline dice / IoU from supervised predictions
@@ -322,6 +370,25 @@ def run_one_epoch(
             f"  has_teacher: {teacher is not None}"
             f"  use_semi: {use_semi}"
         )
+        if is_cps and n_cps_batches > 0:
+            lr_B = optimizer_B.param_groups[0].get("lr", 0.0) if optimizer_B else 0.0
+            print(
+                f"cps: loss_A={total_cps_loss_A / n_cps_batches:.6f}  "
+                f"loss_B={total_cps_loss_B / n_cps_batches:.6f}  "
+                f"sup_B={total_sup_loss_B / max(n_samples, 1):.6f}  "
+                f"agree={total_pseudo_agree / n_cps_batches:.4f}  "
+                f"pos_A={total_pseudo_A_pos / n_cps_batches:.4f}  "
+                f"pos_B={total_pseudo_B_pos / n_cps_batches:.4f}  "
+                f"lr_B={lr_B:.6f}"
+            )
+
+    # CPS averages
+    avg_cps_loss_A  = total_cps_loss_A / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
+    avg_cps_loss_B  = total_cps_loss_B / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
+    avg_sup_loss_B  = total_sup_loss_B / max(n_samples, 1) if is_cps else 0.0
+    avg_pseudo_agree = total_pseudo_agree / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
+    avg_pseudo_A_pos = total_pseudo_A_pos / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
+    avg_pseudo_B_pos = total_pseudo_B_pos / max(n_cps_batches, 1) if n_cps_batches > 0 else 0.0
 
     return {
         "loss": avg_loss,
@@ -337,6 +404,12 @@ def run_one_epoch(
         "pl_conf_mean_selected": pl_conf_mean_selected,
         "pl_conf_coverage": pl_conf_coverage,
         "pl_pos_frac": pl_pos_frac,
+        "cps_loss_A": avg_cps_loss_A,
+        "cps_loss_B": avg_cps_loss_B,
+        "sup_loss_B": avg_sup_loss_B,
+        "pseudo_agree": avg_pseudo_agree,
+        "pseudo_A_pos": avg_pseudo_A_pos,
+        "pseudo_B_pos": avg_pseudo_B_pos,
     }
 
 
@@ -381,10 +454,35 @@ def run_training(cfg: dict, loaders: dict):
     )
 
     teacher = None
+    optimizer_B = None
+    scheduler_B = None
+    ssl_method = cfg.get("ssl_method", "pseudo_label")
+
     if cfg.get("use_semi", False):
-        teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"]).to(device)
-        clone_model_weights(model, teacher)
-        teacher.eval()
+        if ssl_method == "cps":
+            # CPS: model_B with independent decoder/head initialization
+            _orig_seed = cfg.get("seed", 0)
+            seed_everything(_orig_seed + 1000)
+            teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"]).to(device)
+            seed_everything(_orig_seed)  # restore original seed
+            print("CPS model_B:", cfg["arch"], cfg["backbone"], "| params ≈", count_parameters_m(teacher), "M")
+            optimizer_B = torch.optim.Adam(
+                filter(lambda p: p.requires_grad, teacher.parameters()),
+                lr=cfg["lr"],
+                weight_decay=cfg.get("weight_decay", 1e-4),
+            )
+            scheduler_B = SequentialLR(
+                optimizer_B,
+                schedulers=[
+                    LinearLR(optimizer_B, start_factor=1e-3, end_factor=1.0, total_iters=warmup_epochs),
+                    CosineAnnealingLR(optimizer_B, T_max=max(1, cfg["epochs"] - warmup_epochs), eta_min=0.0),
+                ],
+                milestones=[warmup_epochs],
+            )
+        else:
+            teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"]).to(device)
+            clone_model_weights(model, teacher)
+            teacher.eval()
 
     train_loader = loaders["train_loader"]
     val_loader = loaders["val_loader"]
@@ -431,6 +529,9 @@ def run_training(cfg: dict, loaders: dict):
             "pl_conf_mean_all", "pl_conf_std_all", "pl_conf_mean_selected",
             "pl_conf_coverage", "pl_pos_frac",
             "elapsed_sec",
+            "cps_loss_A", "cps_loss_B", "sup_loss_B",
+            "pseudo_agree", "pseudo_A_pos", "pseudo_B_pos",
+            "val_iou_B",
         ])
 
     history = []
@@ -457,6 +558,7 @@ def run_training(cfg: dict, loaders: dict):
             teacher=teacher,
             unl_loader=unlabeled_loader,
             temp_loader=temporal_unlab_loader,
+            optimizer_B=optimizer_B,
         )
 
         val_stats = run_one_epoch(
@@ -490,16 +592,33 @@ def run_training(cfg: dict, loaders: dict):
         ckpt_score = val_iou_global
         print(f"[VAL ckpt-score] IoU_global={val_iou_global:.4f} | BF1={bf1_for_score:.4f} | score=1*IoU={ckpt_score:.6f}")
 
+        # CPS: diagnostic val_iou_B (does NOT control checkpoint selection)
+        val_iou_B = 0.0
+        if ssl_method == "cps" and teacher is not None:
+            teacher.eval()
+            val_eval_B = eval_imagewise_and_global(
+                teacher, val_loader, device=device,
+                thr=cfg["eval_threshold"], logits=True,
+                split_name=f"VAL_B@{epoch:03d}",
+            )
+            val_iou_B = float(val_eval_B["global_iou"])
+            teacher.train()
+            print(f"[VAL_B diagnostic] IoU_global_B={val_iou_B:.4f}")
+
         if ckpt_score > best_ckpt_score + 1e-6:
             best_ckpt_score = ckpt_score
             best_val_loss_ref = min(best_val_loss_ref, val_stats["loss"])
             torch.save(model.state_dict(), best_path)
+            if ssl_method == "cps" and teacher is not None:
+                torch.save(teacher.state_dict(), best_path.replace("best_model.pt", "best_model_B.pt"))
             print(f"  ↳ nuevo mejor checkpoint (score={best_ckpt_score:.6f}, val_loss={val_stats['loss']:.6f}) guardado en {best_path}")
             epochs_without_improve = 0
         else:
             epochs_without_improve += 1
 
         scheduler.step()
+        if scheduler_B is not None:
+            scheduler_B.step()
 
         dt = time.time() - t0
         print(
@@ -548,6 +667,11 @@ def run_training(cfg: dict, loaders: dict):
                 train_stats["pl_conf_mean_selected"],
                 train_stats["pl_conf_coverage"], train_stats["pl_pos_frac"],
                 dt,
+                train_stats["cps_loss_A"], train_stats["cps_loss_B"],
+                train_stats["sup_loss_B"],
+                train_stats["pseudo_agree"], train_stats["pseudo_A_pos"],
+                train_stats["pseudo_B_pos"],
+                val_iou_B,
             ])
         # ──────────────────────────────────────────────────────────────
 
