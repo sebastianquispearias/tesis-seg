@@ -432,7 +432,10 @@ def build_dataloaders(
     temporal_unlab_loader = None
 
     if cfg.get("use_semi", False) and unlabeled_ds is not None:
-        batch_size_unlab = max(1, cfg["batch_size"] // 4)
+        # Default preserves existing behavior (batch_size // 4). DeepLabV3+ has an
+        # ASPP global-pooling + BatchNorm branch that crashes on an effective batch
+        # of 1 ([N,C,1,1] with N=1), so it overrides this to >=2 via cfg.
+        batch_size_unlab = cfg.get("batch_size_unlab") or max(1, cfg["batch_size"] // 4)
 
         unlabeled_loader = DataLoader(
             unlabeled_ds,
