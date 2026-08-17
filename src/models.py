@@ -2,7 +2,7 @@ import torch
 import segmentation_models_pytorch as smp
 
 
-def create_model(arch: str, backbone: str, n_classes: int = 1):
+def create_model(arch: str, backbone: str, n_classes: int = 1, pretrained: bool = False):
     arch = arch.lower()
 
     if arch == "unet":
@@ -42,7 +42,7 @@ def create_model(arch: str, backbone: str, n_classes: int = 1):
         )
     elif arch == "bifpn_unet":
         from src.bifpn_unet import BiFPNUNet
-        return BiFPNUNet(in_channels=3, n_classes=n_classes)
+        return BiFPNUNet(in_channels=3, n_classes=n_classes, pretrained=pretrained)
     elif arch == "transunet":
         import os
         import numpy as np

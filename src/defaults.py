@@ -57,6 +57,14 @@ DEFAULT_CONFIG = {
     "semi_start_epoch": 30,
     "semi_warmup_epochs": 20,
     "ssl_method": "pseudo_label",  # "pseudo_label" or "mean_teacher"
+    # Congela las estadísticas de BatchNorm durante los forwards del estudiante
+    # sobre datos NO etiquetados. Sirve para separar dos cosas que hoy van
+    # juntas: lo que aporta la pérdida de consistencia, y lo que aporta el que
+    # los no etiquetados actualicen las estadísticas de normalización (100 capas
+    # de BatchNorm en U-Net++/efficientnet-b3, que se actualizan incluso con
+    # lambda_u = 0, porque el forward se ejecuta igual).
+    # False = comportamiento histórico, byte a byte. No cambia ningún run previo.
+    "freeze_bn_on_unlabeled": False,
 
     # =========================
     # Consistencia temporal
@@ -144,6 +152,7 @@ def summarize_config(cfg: dict) -> str:
         "semi_start_epoch",
         "semi_warmup_epochs",
         "ssl_method",
+        "freeze_bn_on_unlabeled",
         "use_temp_consistency",
         "lambda_t",
         "temp_start_epoch",

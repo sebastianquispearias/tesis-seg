@@ -315,9 +315,12 @@ class BiFPNUNet(nn.Module):
         bifpn_channels=128,
         use_bot=True,
         bot_heads=4,
+        pretrained=False,
     ):
         super().__init__()
         self.encoder = VGG16Encoder(in_channels)
+        if pretrained:
+            self._load_pretrained_encoder()
         self.bifpn = BiFPN(encoder_channels, bifpn_channels)
         self.use_bot = use_bot
         if use_bot:
@@ -325,6 +328,28 @@ class BiFPNUNet(nn.Module):
                 channels=bifpn_channels, n_heads=bot_heads
             )
         self.decoder = UNetDecoder(bifpn_channels, n_classes)
+
+    def _load_pretrained_encoder(self):
+        import torchvision.models as tvm
+        vgg = tvm.vgg16(weights=tvm.VGG16_Weights.IMAGENET1K_V1)
+        mapping = {
+            'features.0':  'block1.0', 'features.2':  'block1.2',
+            'features.5':  'block2.0', 'features.7':  'block2.2',
+            'features.10': 'block3.0', 'features.12': 'block3.2',
+            'features.14': 'block3.4',
+            'features.17': 'block4.0', 'features.19': 'block4.2',
+            'features.21': 'block4.4',
+            'features.24': 'block5.0', 'features.26': 'block5.2',
+            'features.28': 'block5.4',
+        }
+        src_sd = vgg.features.state_dict()
+        tgt_sd = {}
+        for src_prefix, tgt_prefix in mapping.items():
+            tgt_sd[f'{tgt_prefix}.weight'] = src_sd[f'{src_prefix}.weight']
+            tgt_sd[f'{tgt_prefix}.bias'] = src_sd[f'{src_prefix}.bias']
+        self.encoder.load_state_dict(tgt_sd, strict=True)
+        print(f'[BiFPN-UNet] Loaded ImageNet VGG16 weights ({len(tgt_sd)} tensors), all keys matched correctly')
+        del vgg
 
     def forward(self, x):
         # Handle single-channel input by repeating to 3 channels

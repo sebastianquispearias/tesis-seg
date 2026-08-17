@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import math
 import os
@@ -29,6 +30,45 @@ def _cuda_max_mem_mb() -> str:
     if torch.cuda.is_available():
         return f"{torch.cuda.max_memory_allocated() / 1e6:.0f} MB"
     return "n/a"
+
+
+@contextlib.contextmanager
+def _bn_congelado(model, activo: bool):
+    """Ejecuta un forward SIN que BatchNorm actualice sus estadísticas acumuladas.
+
+    Por qué existe
+    --------------
+    Con ``lambda_u = 0`` los datos no etiquetados no aportan gradiente, pero el
+    forward del estudiante sobre ellos se ejecuta igual, y en modo ``train()``
+    eso mueve ``running_mean`` y ``running_var`` de las 100 capas de BatchNorm.
+    Es decir: el pool influye en el modelo final aunque la pérdida esté apagada.
+    Este gestor permite medir ese efecto por separado.
+
+    Por qué momentum = 0 y no ``eval()``
+    ------------------------------------
+    La actualización es ``running ← (1-m)·running + m·lote``. Con ``m = 0`` se
+    reduce a ``running ← running``: no se mueve nada. Y la normalización sigue
+    usando las estadísticas DEL LOTE, o sea que la salida del forward es idéntica
+    (comprobado: diferencia máxima 0.0). ``eval()`` en cambio normalizaría con
+    las estadísticas acumuladas y cambiaría lo que la capa calcula.
+
+    Nota: ``num_batches_tracked`` sigue incrementándose. Es inofensivo aquí
+    porque ``momentum`` es un flotante y no ``None``; sólo se usaría para la
+    media acumulativa en ese otro caso.
+    """
+    if not activo:
+        yield
+        return
+    capas = [m for m in model.modules()
+             if isinstance(m, torch.nn.modules.batchnorm._BatchNorm)]
+    guardados = [m.momentum for m in capas]
+    try:
+        for m in capas:
+            m.momentum = 0.0
+        yield
+    finally:
+        for m, v in zip(capas, guardados):
+            m.momentum = v
 
 
 def _ramp_weight(epoch: int, start_epoch: int, warmup_epochs: int, max_weight: float) -> float:
@@ -120,6 +160,10 @@ def run_one_epoch(
         train and cfg.get("use_temp_consistency", False) and (temp_loader is not None)
     )
 
+    # Apagado por defecto: con False el codigo se comporta exactamente como
+    # antes, asi que ningun run ya realizado queda afectado.
+    congelar_bn = bool(cfg.get("freeze_bn_on_unlabeled", False))
+
     unl_iter = iter(unl_loader) if use_semi else None
     temp_iter = iter(temp_loader) if use_temp else None
 
@@ -181,8 +225,12 @@ def run_one_epoch(
 
                 if is_cps:
                     # === CPS: cross pseudo supervision on UNLABELED batch ===
-                    logits_A_u = model(xs_u)       # model_A forward on strong-augmented unlabeled
-                    logits_B_u = teacher(xs_u)      # model_B forward on strong-augmented unlabeled
+                    # En CPS los DOS modelos van en train(), asi que los dos
+                    # actualizarian BatchNorm con los no etiquetados.
+                    with _bn_congelado(model, congelar_bn), \
+                         _bn_congelado(teacher, congelar_bn):
+                        logits_A_u = model(xs_u)   # model_A forward on strong-augmented unlabeled
+                        logits_B_u = teacher(xs_u)  # model_B forward on strong-augmented unlabeled
 
                     with torch.no_grad():
                         pseudo_A = (torch.sigmoid(logits_A_u) >= 0.5).float()
@@ -230,7 +278,10 @@ def run_one_epoch(
                                 total_pl_conf_selected += float(conf_pixel[conf_mask].mean())
                                 n_pl_selected_batches  += 1
 
-                    logits_u = model(xs_u)
+                    # El profesor ya va en eval(), asi que sus forwards no tocan
+                    # BatchNorm. El del estudiante si, y es el que importa aqui.
+                    with _bn_congelado(model, congelar_bn):
+                        logits_u = model(xs_u)
                     if ssl_method_local == "mean_teacher":
                         probs_student = torch.sigmoid(logits_u)
                         unsup_loss = F.mse_loss(probs_student, probs_teacher.detach())
@@ -267,8 +318,10 @@ def run_one_epoch(
                 xtp = tbatch["image_tp"].to(device, non_blocking=True).float()
                 bs_t = xt.size(0)
 
-                logits_t = model(xt)
-                logits_tp = model(xtp)
+                # Los frames temporales tambien son datos sin etiqueta.
+                with _bn_congelado(model, congelar_bn):
+                    logits_t = model(xt)
+                    logits_tp = model(xtp)
                 probs_t = torch.sigmoid(logits_t)
                 probs_tp = torch.sigmoid(logits_tp)
 
@@ -434,7 +487,8 @@ def run_training(cfg: dict, loaders: dict):
 
     save_json(cfg, os.path.join(exp_dir, "config.json"))
 
-    model = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"]).to(device)
+    model = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"],
+                         pretrained=cfg.get("pretrained_encoder", False)).to(device)
     print("Modelo:", cfg["arch"], cfg["backbone"], "| params ≈", count_parameters_m(model), "M")
 
     criterion = build_criterion(cfg)
@@ -473,7 +527,8 @@ def run_training(cfg: dict, loaders: dict):
             # CPS: model_B with independent decoder/head initialization
             _orig_seed = cfg.get("seed", 0)
             seed_everything(_orig_seed + 1000)
-            teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"]).to(device)
+            teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"],
+                                   pretrained=cfg.get("pretrained_encoder", False)).to(device)
             seed_everything(_orig_seed)  # restore original seed
             print("CPS model_B:", cfg["arch"], cfg["backbone"], "| params ≈", count_parameters_m(teacher), "M")
             optimizer_B = torch.optim.Adam(
@@ -490,7 +545,8 @@ def run_training(cfg: dict, loaders: dict):
                 milestones=[warmup_epochs],
             )
         else:
-            teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"]).to(device)
+            teacher = create_model(cfg["arch"], cfg["backbone"], cfg["n_classes"],
+                                   pretrained=cfg.get("pretrained_encoder", False)).to(device)
             clone_model_weights(model, teacher)
             teacher.eval()
 
