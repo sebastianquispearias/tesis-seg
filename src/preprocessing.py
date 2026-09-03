@@ -99,6 +99,7 @@ def preprocess_image_and_mask(
     imagenet_norm: bool = False,
     image_preproc: str = "base",
     mask_smoothing: str = "none",
+    image_norm: str = "unit",
     debug: bool = False,
 ) -> Dict[str, np.ndarray]:
     image_uint8 = ensure_rgb(image_uint8)
@@ -136,6 +137,17 @@ def preprocess_image_and_mask(
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
         image = (image - mean) / std
+    elif image_norm == "zscore":
+        # nnU-Net normalises every image to zero mean and unit variance rather than
+        # rescaling it to the unit interval, and its plan for this dataset selects
+        # ZScoreNormalization. Statistics are taken over the whole padded frame, the
+        # only region available at inference time. The guard keeps a constant image,
+        # which the padding can produce, from dividing by zero.
+        mean = float(image.mean())
+        std = float(image.std())
+        image = (image - mean) / (std if std > 1e-8 else 1.0)
+    elif image_norm != "unit":
+        raise ValueError(f"image_norm no soportado: {image_norm}")
 
     # CHW para PyTorch
     image = np.transpose(image, (2, 0, 1))

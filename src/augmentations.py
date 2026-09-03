@@ -13,11 +13,104 @@ def _require_albumentations():
         )
 
 
+def _build_optional(factory_variants):
+    """First transform that the installed albumentations accepts.
+
+    Several transforms were renamed or given new argument names between
+    albumentations 1.x and 2.x. Rather than pinning a version, which the current
+    Colab image no longer supports, each candidate signature is attempted in turn
+    and the first one that constructs is used. A transform that no variant can
+    build returns None and is dropped from the pipeline by the caller, which is
+    reported rather than silently ignored.
+    """
+    for factory in factory_variants:
+        try:
+            return factory()
+        except Exception:
+            continue
+    return None
+
+
+def get_nnunet_style_augmentation(cfg: dict, full: bool):
+    """Augmentation in the style of nnU-Net's default two-dimensional pipeline.
+
+    nnU-Net perturbs far more aggressively than the pipeline used here: rotations
+    reach half a turn, scaling spans 0.7 to 1.4, and it adds blur and a simulated
+    loss of resolution that this pipeline has no equivalent of. Two intensities are
+    offered because the strongest settings are not obviously valid for this data: a
+    lateral videofluoroscopic view has a fixed anatomical orientation, so a mirrored
+    or inverted frame is one the model will never meet at test time.
+
+    With ``full`` false the geometry stays inside what the acquisition can plausibly
+    produce, and mirroring is off. With ``full`` true the settings are nnU-Net's own,
+    so that a drop can be attributed to implausible geometry rather than to intensity
+    of augmentation in general.
+    """
+    _require_albumentations()
+
+    rotate = 180 if full else 30
+    scale_low, scale_high = (0.7, 1.4) if full else (0.85, 1.15)
+
+    transforms = [
+        A.ShiftScaleRotate(
+            shift_limit=0.0,
+            scale_limit=(scale_low - 1.0, scale_high - 1.0),
+            rotate_limit=rotate,
+            border_mode=cv2.BORDER_CONSTANT,
+            p=0.2,
+        ),
+    ]
+
+    if full:
+        transforms += [A.HorizontalFlip(p=0.5), A.VerticalFlip(p=0.5)]
+
+    transforms += [
+        A.RandomBrightnessContrast(brightness_limit=0.25, contrast_limit=0.0, p=0.15),
+        A.RandomBrightnessContrast(brightness_limit=0.0, contrast_limit=0.25, p=0.15),
+        A.RandomGamma(gamma_limit=(70, 150), p=0.3),
+    ]
+
+    blur = _build_optional([
+        lambda: A.GaussianBlur(blur_limit=0, sigma_limit=(0.5, 1.0), p=0.2),
+        lambda: A.GaussianBlur(blur_limit=(3, 5), p=0.2),
+    ])
+    lowres = _build_optional([
+        lambda: A.Downscale(scale_range=(0.5, 0.9), p=0.25),
+        lambda: A.Downscale(scale_min=0.5, scale_max=0.9, p=0.25),
+    ])
+    noise = _build_optional([
+        lambda: A.GaussNoise(std_range=(0.0, 0.1), p=0.1),
+        lambda: A.GaussNoise(var_limit=(0.0, 25.0), p=0.1),
+    ])
+
+    dropped = []
+    for name, tf in (("GaussianBlur", blur), ("Downscale", lowres), ("GaussNoise", noise)):
+        if tf is None:
+            dropped.append(name)
+        else:
+            transforms.append(tf)
+
+    if dropped:
+        raise RuntimeError(
+            "La albumentations instalada no acepta ninguna firma conocida de: "
+            + ", ".join(dropped)
+            + ". Abortando en vez de entrenar con una augmentation incompleta."
+        )
+
+    return A.Compose(transforms)
+
+
 def get_supervised_train_augmentation(cfg: dict):
     _require_albumentations()
 
     if not cfg.get("aug_train_enable", True):
         return A.Compose([])
+
+    profile = str(cfg.get("aug_profile", "base")).lower()
+    if profile in ("nnunet_moderate", "nnunet_full"):
+        return get_nnunet_style_augmentation(cfg, full=(profile == "nnunet_full"))
+    if profile != "base":
+        raise ValueError(f"aug_profile no soportado: {profile}")
 
     return A.Compose([
         A.ShiftScaleRotate(

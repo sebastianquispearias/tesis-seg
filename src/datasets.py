@@ -113,6 +113,7 @@ class SegmentationDataset(Dataset):
             use_pad=self.cfg["use_pad"],
             imagenet_norm=self.cfg["imagenet_norm"],
             image_preproc=self.cfg["image_preproc"],
+            image_norm=self.cfg.get("image_norm", "unit"),
             mask_smoothing=self.cfg["mask_smoothing"],
             debug=self.cfg.get("debug", False),
         )
@@ -182,6 +183,7 @@ class UnlabeledFramesDataset(Dataset):
             use_pad=self.cfg["use_pad"],
             imagenet_norm=self.cfg["imagenet_norm"],
             image_preproc=self.cfg["image_preproc"],
+            image_norm=self.cfg.get("image_norm", "unit"),
             mask_smoothing="none",
             debug=self.cfg.get("debug", False),
         )
@@ -285,6 +287,7 @@ class TemporalUnlabeledPairsDataset(Dataset):
             use_pad=self.cfg["use_pad"],
             imagenet_norm=self.cfg["imagenet_norm"],
             image_preproc=self.cfg["image_preproc"],
+            image_norm=self.cfg.get("image_norm", "unit"),
             mask_smoothing="none",
             debug=self.cfg.get("debug", False),
         )
