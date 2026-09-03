@@ -1,3 +1,5 @@
+import math
+
 import cv2
 
 try:
@@ -29,6 +31,61 @@ def _build_optional(factory_variants):
         except Exception:
             continue
     return None
+
+
+def _shift_scale_rotate(shift_limit, scale_limit, rotate_limit, p):
+    """ShiftScaleRotate padding with black, on either albumentations.
+
+    The keywords that name the padding value were renamed from ``value`` and
+    ``mask_value`` in 1.x to ``fill`` and ``fill_mask`` in 2.x. Both variants below
+    request the same black padding, which is also what the 2.x defaults provide;
+    the point of stating it is that 2.x accepts the 1.x keywords with a warning,
+    and a pipeline that emits no warnings is one where a new warning means
+    something.
+    """
+    comun = dict(
+        shift_limit=shift_limit,
+        scale_limit=scale_limit,
+        rotate_limit=rotate_limit,
+        border_mode=cv2.BORDER_CONSTANT,
+        p=p,
+    )
+
+    transformacion = _build_optional([
+        lambda: A.ShiftScaleRotate(fill=0, fill_mask=0, **comun),
+        lambda: A.ShiftScaleRotate(value=0, mask_value=0, **comun),
+    ])
+    if transformacion is None:
+        raise RuntimeError(
+            "La albumentations instalada no acepta ninguna firma conocida de "
+            "ShiftScaleRotate. Abortando en vez de entrenar con otro relleno."
+        )
+    return transformacion
+
+
+def _gauss_noise(var_limit, p):
+    """Gaussian noise at the intensity the pipeline asks for, on either albumentations.
+
+    The 1.x signature takes a variance range in squared intensity units on the
+    0-255 scale, while the 2.x signature takes a standard deviation range given as
+    a fraction of the maximum value. Both variants below describe the same physical
+    noise level. The 2.x form is attempted first because 2.x accepts the 1.x keyword
+    with nothing but a warning and then builds the transform from its own defaults,
+    which are about twenty times stronger than anything this pipeline requests.
+    """
+    low, high = float(var_limit[0]), float(var_limit[1])
+    std_low, std_high = math.sqrt(low) / 255.0, math.sqrt(high) / 255.0
+
+    noise = _build_optional([
+        lambda: A.GaussNoise(std_range=(std_low, std_high), p=p),
+        lambda: A.GaussNoise(var_limit=(low, high), p=p),
+    ])
+    if noise is None:
+        raise RuntimeError(
+            "La albumentations instalada no acepta ninguna firma conocida de "
+            "GaussNoise. Abortando en vez de entrenar con otro nivel de ruido."
+        )
+    return noise
 
 
 def get_nnunet_style_augmentation(cfg: dict, full: bool):
@@ -113,14 +170,11 @@ def get_supervised_train_augmentation(cfg: dict):
         raise ValueError(f"aug_profile no soportado: {profile}")
 
     return A.Compose([
-        A.ShiftScaleRotate(
-            shift_limit=cfg.get("aug_shift_limit", 0.01),
-            scale_limit=cfg.get("aug_scale_limit", 0.03),
-            rotate_limit=cfg.get("aug_rotate_limit", 5),
-            border_mode=cv2.BORDER_CONSTANT,
-            value=0,
-            mask_value=0,
-            p=0.5,
+        _shift_scale_rotate(
+            cfg.get("aug_shift_limit", 0.01),
+            cfg.get("aug_scale_limit", 0.03),
+            cfg.get("aug_rotate_limit", 5),
+            0.5,
         ),
         # En el notebook original el flip estaba comentado.
         # Lo dejamos controlado por cfg pero apagado por defecto.
@@ -134,9 +188,9 @@ def get_supervised_train_augmentation(cfg: dict):
             gamma_limit=cfg.get("aug_random_gamma_limit", (90, 110)),
             p=cfg.get("aug_random_gamma_p", 0.2),
         ),
-        A.GaussNoise(
-            var_limit=cfg.get("aug_gaussian_noise_var_limit", (3.0, 12.0)),
-            p=cfg.get("aug_gaussian_noise_p", 0.15),
+        _gauss_noise(
+            cfg.get("aug_gaussian_noise_var_limit", (3.0, 12.0)),
+            cfg.get("aug_gaussian_noise_p", 0.15),
         ),
     ])
 
@@ -148,14 +202,7 @@ def get_weak_augmentation(cfg: dict):
         return A.Compose([])
 
     return A.Compose([
-        A.ShiftScaleRotate(
-            shift_limit=0.01,
-            scale_limit=0.02,
-            rotate_limit=3,
-            border_mode=cv2.BORDER_CONSTANT,
-            value=0,
-            p=0.5,
-        ),
+        _shift_scale_rotate(0.01, 0.02, 3, 0.5),
         A.HorizontalFlip(p=0.1),
     ])
 
@@ -167,14 +214,7 @@ def get_strong_augmentation(cfg: dict):
         return A.Compose([])
 
     return A.Compose([
-        A.ShiftScaleRotate(
-            shift_limit=0.015,
-            scale_limit=0.04,
-            rotate_limit=6,
-            border_mode=cv2.BORDER_CONSTANT,
-            value=0,
-            p=0.6,
-        ),
+        _shift_scale_rotate(0.015, 0.04, 6, 0.6),
         A.HorizontalFlip(p=0.15),
         A.RandomBrightnessContrast(
             brightness_limit=0.12,
@@ -185,10 +225,7 @@ def get_strong_augmentation(cfg: dict):
             gamma_limit=(88, 112),
             p=0.3,
         ),
-        A.GaussNoise(
-            var_limit=(4.0, 16.0),
-            p=0.25,
-        ),
+        _gauss_noise((4.0, 16.0), 0.25),
     ])
 
 
