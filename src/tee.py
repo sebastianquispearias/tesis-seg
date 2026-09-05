@@ -10,13 +10,16 @@ session.
 
 The usual way of saving it, contextlib.redirect_stdout, replaces the stream
 instead of duplicating it, which is why the screen goes blank and the practice
-gets abandoned. This module duplicates: every line is written to the file and to
-the original stream, so the notebook keeps displaying its output exactly as
-before.
+gets abandoned. This module duplicates: every line goes to the file and to the
+original stream, so the notebook keeps displaying its output exactly as before.
 
-Every write is flushed, so a session that is killed by a timeout still leaves a
-complete log up to the moment it stopped, which is precisely the case worth
-having.
+Writing straight to a mounted Google Drive does not work for this. Drive
+publishes a file when it is closed, so a log held open for the two hours of a
+run only appears once the run ends, and is lost if the session is killed first,
+which is precisely the case worth covering. The transcript is therefore written
+to local disk, where a write is immediate, and copied over to its destination
+every few seconds and once more at the end. A session that dies leaves behind
+everything up to the last copy.
 
 Typical use, around the training call::
 
@@ -29,16 +32,22 @@ Typical use, around the training call::
 
 import contextlib
 import os
+import re
+import shutil
 import sys
+import tempfile
 import time
+
+INTERVALO_COPIA = 20.0      # segundos entre copias al destino
 
 
 class _Tee:
     """A writable stream that forwards to several streams at once."""
 
-    def __init__(self, primary, *others):
+    def __init__(self, primary, *others, al_escribir=None):
         self._primary = primary
         self._streams = (primary,) + others
+        self._al_escribir = al_escribir
 
     def write(self, data):
         n = 0
@@ -48,6 +57,11 @@ class _Tee:
                 s.flush()
             except Exception:
                 # a broken secondary must never take down the run
+                pass
+        if self._al_escribir is not None:
+            try:
+                self._al_escribir()
+            except Exception:
                 pass
         return n if n else len(data)
 
@@ -75,43 +89,84 @@ class _Tee:
         return getattr(self._primary, "encoding", "utf-8")
 
 
-@contextlib.contextmanager
-def tee_output(path, also_stderr=True, cabecera=True):
-    """Duplicate stdout, and optionally stderr, into path while still printing.
+def _nombre_local(destino):
+    """A local scratch name derived from the destination, safe on any platform."""
+    partes = os.path.abspath(destino).replace("\\", "/").split("/")
+    etiqueta = "_".join(partes[-3:]) if len(partes) >= 3 else partes[-1]
+    etiqueta = re.sub(r"[^A-Za-z0-9_.-]", "_", etiqueta)
+    return os.path.join(tempfile.gettempdir(), "tee_" + etiqueta)
 
-    The file is opened in append mode so that a run resumed in the same
+
+@contextlib.contextmanager
+def tee_output(destino, also_stderr=True, cabecera=True,
+               intervalo=INTERVALO_COPIA):
+    """Duplicate stdout, and optionally stderr, into destino while still printing.
+
+    The destination is opened in append mode, so a run repeated in the same
     directory adds to its history instead of erasing it.
     """
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    fh = open(path, "a", encoding="utf-8", buffering=1)
+    destino = os.path.abspath(destino)
+    os.makedirs(os.path.dirname(destino), exist_ok=True)
+
+    local = _nombre_local(destino)
+    if os.path.isfile(destino):
+        try:
+            shutil.copyfile(destino, local)      # conservar lo ya escrito
+        except Exception:
+            pass
+    elif os.path.isfile(local):
+        try:
+            os.remove(local)                     # sobra de un run anterior
+        except Exception:
+            pass
+
+    fh = open(local, "a", encoding="utf-8", buffering=1)
 
     if cabecera:
         fh.write("\n{}\n{}  {}\n{}\n".format(
             "=" * 78,
             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            os.path.basename(os.path.dirname(os.path.abspath(path))),
+            os.path.basename(os.path.dirname(destino)),
             "=" * 78))
         fh.flush()
 
+    estado = {"ultima": 0.0}
+
+    def copiar():
+        try:
+            fh.flush()
+            shutil.copyfile(local, destino)
+            estado["ultima"] = time.monotonic()
+        except Exception:
+            pass
+
+    def quiza_copiar():
+        if time.monotonic() - estado["ultima"] >= intervalo:
+            copiar()
+
+    copiar()                                     # que exista desde el principio
+
     out_antes, err_antes = sys.stdout, sys.stderr
-    sys.stdout = _Tee(out_antes, fh)
+    sys.stdout = _Tee(out_antes, fh, al_escribir=quiza_copiar)
     if also_stderr:
-        sys.stderr = _Tee(err_antes, fh)
+        sys.stderr = _Tee(err_antes, fh, al_escribir=quiza_copiar)
     try:
-        yield path
+        yield destino
     except BaseException:
         # the traceback is the most valuable thing a dead run leaves behind
         import traceback
         try:
             fh.write("\n--- EXCEPCION ---\n")
             traceback.print_exc(file=fh)
-            fh.flush()
         except Exception:
             pass
         raise
     finally:
         sys.stdout, sys.stderr = out_antes, err_antes
         try:
-            fh.close()
-        except Exception:
-            pass
+            copiar()
+        finally:
+            try:
+                fh.close()
+            except Exception:
+                pass
