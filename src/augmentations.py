@@ -229,6 +229,40 @@ def get_strong_augmentation(cfg: dict):
     ])
 
 
+def get_strong_photometric_augmentation(cfg: dict):
+    """The photometric half of the strong pipeline, without its geometry.
+
+    Mean Teacher compares the teacher's map on the weak view against the
+    student's on the strong view with a pixel-wise error, so the two views have
+    to describe the same anatomy at the same coordinates. The two pipelines draw
+    their geometry independently, which they cannot, and measurement puts the
+    resulting misalignment at 96 per cent of the loss that two views of one model
+    produce.
+
+    This returns the same brightness, gamma and noise the strong pipeline
+    applies, with the shift, scale, rotation and flip removed, so it can be laid
+    on top of an already geometrically transformed view. Used only when
+    cfg["aug_alineada"] is on; the default path is untouched.
+    """
+    _require_albumentations()
+
+    if not cfg.get("strong_aug_enable", True):
+        return A.Compose([])
+
+    return A.Compose([
+        A.RandomBrightnessContrast(
+            brightness_limit=0.12,
+            contrast_limit=0.12,
+            p=0.6,
+        ),
+        A.RandomGamma(
+            gamma_limit=(88, 112),
+            p=0.3,
+        ),
+        _gauss_noise((4.0, 16.0), 0.25),
+    ])
+
+
 def apply_aug_to_image_mask(image, mask, aug):
     if aug is None:
         return image, mask

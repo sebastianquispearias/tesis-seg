@@ -161,11 +161,16 @@ class UnlabeledFramesDataset(Dataset):
         cfg: dict,
         transform_weak=None,
         transform_strong=None,
+        transform_strong_photo=None,
     ):
         self.images_dir = str(images_dir)
         self.cfg = cfg
         self.weak_tf = transform_weak
         self.strong_tf = transform_strong
+        # Apagado por defecto: sin esta bandera el dataset entrega exactamente
+        # los mismos tensores que entregaba antes de existir.
+        self.alineada = bool(cfg.get("aug_alineada", False))
+        self.photo_tf = transform_strong_photo
         self.files = list_png_files(self.images_dir)
 
         if len(self.files) == 0:
@@ -198,13 +203,26 @@ class UnlabeledFramesDataset(Dataset):
             raise RuntimeError(f"No pude leer {path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        weak_img = img.copy()
-        strong_img = img.copy()
+        if getattr(self, "alineada", False):
+            # Una sola tirada geometrica, compartida por las dos vistas, y solo
+            # fotometria encima de la fuerte. La perdida de consistencia compara
+            # pixel contra pixel, asi que las dos vistas tienen que describir la
+            # misma anatomia en las mismas coordenadas.
+            base = img.copy()
+            if self.weak_tf is not None:
+                base = self.weak_tf(image=base)["image"]
+            weak_img = base
+            strong_img = base.copy()
+            if self.photo_tf is not None:
+                strong_img = self.photo_tf(image=strong_img)["image"]
+        else:
+            weak_img = img.copy()
+            strong_img = img.copy()
 
-        if self.weak_tf is not None:
-            weak_img = self.weak_tf(image=weak_img)["image"]
-        if self.strong_tf is not None:
-            strong_img = self.strong_tf(image=strong_img)["image"]
+            if self.weak_tf is not None:
+                weak_img = self.weak_tf(image=weak_img)["image"]
+            if self.strong_tf is not None:
+                strong_img = self.strong_tf(image=strong_img)["image"]
 
         weak_img = self._preprocess_image_only(weak_img)
         strong_img = self._preprocess_image_only(strong_img)
@@ -366,11 +384,17 @@ def build_unlabeled_datasets(cfg: dict, weak_tf=None, strong_tf=None):
     if not os.path.isdir(unlabeled_images_dir):
         return None, None
 
+    photo_tf = None
+    if cfg.get("aug_alineada", False):
+        from .augmentations import get_strong_photometric_augmentation
+        photo_tf = get_strong_photometric_augmentation(cfg)
+
     unlabeled_ds = UnlabeledFramesDataset(
         images_dir=unlabeled_images_dir,
         cfg=cfg,
         transform_weak=weak_tf,
         transform_strong=strong_tf,
+        transform_strong_photo=photo_tf,
     )
 
     temporal_unlab_ds = TemporalUnlabeledPairsDataset(
