@@ -232,6 +232,59 @@ if max(tres) - min(tres) > 0.005:
 else:
     print("   >>> OK")
 
+# La tabla de descomposicion se comprueba aparte porque cada eje lleva su propio
+# control: el arreglo del ruido gaussiano parte los brazos en dos generaciones y
+# un eje que cruce las dos no mide lo que dice medir.
+GENERACION = {
+    "runs_nnunet_ablation/A_baseline": "ruido roto",
+    "runs_nnunet_ablation/B_zscore": "ruido roto",
+    "runs_nnunet_ablation/D_bs1": "ruido roto",
+    "runs_nnunet_ablation/A_baseline_fixnoise": "ruido sano",
+    "runs_nnunet_ablation/X_sup_base": "ruido sano",
+    "runs_nnunet_ablation/X_sup_moderate": "ruido sano",
+    "runs_nnunet_ablation/C1_aug_moderate": "ruido sano",
+    "runs_nnunet_ablation/C2_aug_full": "ruido sano",
+    "runs_resolucion/E_320_6img": "ruido sano",
+    "runs_resolucion/F_1024_6img": "ruido sano",
+}
+
+EJES = [
+    ("resolucion", ["runs_resolucion/E_320_6img"],
+     ["runs_resolucion/F_1024_6img"], +0.0007),
+    ("augmentation moderada",
+     ["runs_nnunet_ablation/A_baseline_fixnoise", "runs_nnunet_ablation/X_sup_base"],
+     ["runs_nnunet_ablation/C1_aug_moderate", "runs_nnunet_ablation/X_sup_moderate"],
+     -0.0033),
+    ("augmentation completa",
+     ["runs_nnunet_ablation/A_baseline_fixnoise", "runs_nnunet_ablation/X_sup_base"],
+     ["runs_nnunet_ablation/C2_aug_full"], -0.0165),
+    ("normalizacion z-score", ["runs_nnunet_ablation/A_baseline"],
+     ["runs_nnunet_ablation/B_zscore"], -0.0121),
+    ("batch size 1", ["runs_nnunet_ablation/A_baseline"],
+     ["runs_nnunet_ablation/D_bs1"], -0.0458),
+]
+
+print()
+print("TABLA DE DESCOMPOSICION DE nnU-NET: cada eje contra un control de su misma")
+print("generacion de ruido. Es la columna delta lo que se publica, no los absolutos.")
+print("-" * 84)
+for nombre, ctrl, var, esperado in EJES:
+    gen_c = {GENERACION[c] for c in ctrl}
+    gen_v = {GENERACION[v] for v in var}
+    val_c, _ = por_semilla(ctrl)
+    val_v, _ = por_semilla(var)
+    d = media(list(val_v.values())) - media(list(val_c.values()))
+    cruza = bool(gen_c | gen_v) and len(gen_c | gen_v) > 1
+    print("   {:24s} control {:.4f} [{}]  variante {:.4f} [{}]  delta {:+.4f}".format(
+        nombre, media(list(val_c.values())), "/".join(sorted(gen_c)),
+        media(list(val_v.values())), "/".join(sorted(gen_v)), d))
+    if cruza:
+        print("      FALLO  el eje CRUZA las dos generaciones de ruido: no mide lo que dice")
+        fallos.append("eje " + nombre)
+    elif abs(d - esperado) > TOLERANCIA:
+        print("      FALLO  el delta se movio: escrito {:+.4f}".format(esperado))
+        fallos.append("eje " + nombre)
+
 print()
 print("=" * 84)
 if fallos:
