@@ -22,3 +22,5 @@ Thumbs.db
 .env
 .venv/
 venv/
+# copias previas de las ediciones, locales
+*.ANTES_*
