@@ -1,0 +1,63 @@
+{
+ "nbformat": 4,
+ "nbformat_minor": 0,
+ "metadata": {
+  "colab": {
+   "provenance": []
+  },
+  "kernelspec": {
+   "name": "python3",
+   "display_name": "Python 3"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Notebook 13 — nnU-Net INCA Baseline\n",
+    "\n",
+    "Single-run nnU-Net reference on INCA dataset (634 train frames).\n",
+    "Contextual comparison with the U-Net++ SSL pipeline.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "metadata": {},
+   "source": "# === Cell 1: Setup environment (Colab or local), install nnU-Net v2, set env vars ===\n\nimport os, sys\n\n# Auto-detect: Colab vs local PC\nif os.path.exists(\"/content\"):\n    # Running on Google Colab\n    from google.colab import drive\n    drive.mount(\"/content/drive\")\n    PROJECT = \"/content/drive/MyDrive/UNM_vertebras_seg_v3\"\n    get_ipython().system('pip install nnunetv2')\nelse:\n    # Running locally (e.g. RTX 3060 PC via AnyDesk)\n    PROJECT = \"G:/My Drive/UNM_vertebras_seg_v3\"\n    # nnunetv2 should already be installed locally: pip install nnunetv2\n\nWORKSPACE = os.path.join(PROJECT, \"nnunet_workspace\")\nos.makedirs(os.path.join(WORKSPACE, \"nnUNet_raw\"), exist_ok=True)\nos.makedirs(os.path.join(WORKSPACE, \"nnUNet_preprocessed\"), exist_ok=True)\nos.makedirs(os.path.join(WORKSPACE, \"nnUNet_results_inca\"), exist_ok=True)\n\nos.environ[\"nnUNet_raw\"] = os.path.join(WORKSPACE, \"nnUNet_raw\")\nos.environ[\"nnUNet_preprocessed\"] = os.path.join(WORKSPACE, \"nnUNet_preprocessed\")\nos.environ[\"nnUNet_results\"] = os.path.join(WORKSPACE, \"nnUNet_results_inca\")\n\nprint(f\"PROJECT: {PROJECT}\")\nprint(f\"nnUNet_raw: {os.environ['nnUNet_raw']}\")\nprint(f\"nnUNet_preprocessed: {os.environ['nnUNet_preprocessed']}\")\nprint(f\"nnUNet_results: {os.environ['nnUNet_results']}\")\n\nimport torch\nprint(f\"CUDA available: {torch.cuda.is_available()}\")\nif torch.cuda.is_available():\n    print(f\"GPU: {torch.cuda.get_device_name(0)}\")",
+   "outputs": [],
+   "execution_count": null
+  },
+  {
+   "cell_type": "code",
+   "metadata": {},
+   "source": "# === Cell 2: Convert INCA dataset to nnU-Net format (Dataset504_VFSS_INCA) ===\n\nimport os, shutil, json\nfrom PIL import Image\nimport numpy as np\n\nBASE = os.path.join(PROJECT, \"data\", \"inca_dataset\")\nRAW = os.environ[\"nnUNet_raw\"]\nDATASET = os.path.join(RAW, \"Dataset504_VFSS_INCA\")\n\nimagesTr = os.path.join(DATASET, \"imagesTr\")\nlabelsTr = os.path.join(DATASET, \"labelsTr\")\nimagesTs = os.path.join(DATASET, \"imagesTs\")\n\nfor d in [imagesTr, labelsTr, imagesTs]:\n    if os.path.isdir(d):\n        shutil.rmtree(d)\n    os.makedirs(d)\n\n# Copy train + val images; remap masks to {0,1}\nnum_training = 0\nfor split in [\"train\", \"val\"]:\n    img_dir = os.path.join(BASE, split, \"images\")\n    msk_dir = os.path.join(BASE, split, \"masks\")\n    for fname in sorted(os.listdir(img_dir)):\n        if not fname.endswith(\".png\"):\n            continue\n        stem = fname.replace(\".png\", \"\")\n        img = Image.open(os.path.join(img_dir, fname)).convert(\"L\")\n        img.save(os.path.join(imagesTr, f\"{stem}_0000.png\"))\n        msk = np.array(Image.open(os.path.join(msk_dir, fname)).convert(\"L\"))\n        msk_bin = (msk > 127).astype(np.uint8)\n        Image.fromarray(msk_bin).save(os.path.join(labelsTr, f\"{stem}.png\"))\n        num_training += 1\n\n# Copy test images\ntest_img_dir = os.path.join(BASE, \"test\", \"images\")\nfor fname in sorted(os.listdir(test_img_dir)):\n    if not fname.endswith(\".png\"):\n        continue\n    stem = fname.replace(\".png\", \"\")\n    img = Image.open(os.path.join(test_img_dir, fname)).convert(\"L\")\n    img.save(os.path.join(imagesTs, f\"{stem}_0000.png\"))\n\n# dataset.json\nds_json = {\n    \"channel_names\": {\"0\": \"Xray\"},\n    \"labels\": {\"background\": 0, \"vertebra\": 1},\n    \"numTraining\": num_training,\n    \"file_ending\": \".png\",\n}\nwith open(os.path.join(DATASET, \"dataset.json\"), \"w\") as f:\n    json.dump(ds_json, f, indent=2)\n\nprint(f\"Dataset504_VFSS_INCA: {num_training} training, \"\n      f\"{len([f for f in os.listdir(imagesTs) if f.endswith('.png')])} test\")",
+   "outputs": [],
+   "execution_count": null
+  },
+  {
+   "cell_type": "code",
+   "metadata": {},
+   "source": "# === Cell 3: Plan, preprocess, write custom splits ===\n\nimport subprocess\nsubprocess.run([\"nnUNetv2_plan_and_preprocess\", \"-d\", \"504\", \"--verify_dataset_integrity\", \"-c\", \"2d\"], check=True)\n\nimport os, json\n\nBASE = os.path.join(PROJECT, \"data\", \"inca_dataset\")\n\n# Build train/val split matching our pipeline\ntrain_stems = sorted([\n    f.replace(\".png\", \"\")\n    for f in os.listdir(os.path.join(BASE, \"train\", \"images\"))\n    if f.endswith(\".png\")\n])\nval_stems = sorted([\n    f.replace(\".png\", \"\")\n    for f in os.listdir(os.path.join(BASE, \"val\", \"images\"))\n    if f.endswith(\".png\")\n])\n\nprint(f\"Train: {len(train_stems)}, Val: {len(val_stems)}\")\nassert not set(train_stems) & set(val_stems), \"Train/val overlap!\"\n\nsplits_path = os.path.join(\n    os.environ[\"nnUNet_preprocessed\"],\n    \"Dataset504_VFSS_INCA\",\n    \"splits_final.json\"\n)\nwith open(splits_path, \"w\") as f:\n    json.dump([{\"train\": train_stems, \"val\": val_stems}], f, indent=2)\nprint(f\"splits_final.json written: {splits_path}\")",
+   "outputs": [],
+   "execution_count": null
+  },
+  {
+   "cell_type": "code",
+   "metadata": {},
+   "source": "# === Cell 4: Train nnU-Net on INCA ===\n\nimport os, time, subprocess, torch, gc\ngc.collect()\ntorch.cuda.empty_cache()\n\nresults_dir = os.path.join(WORKSPACE, \"nnUNet_results_inca\")\nos.makedirs(results_dir, exist_ok=True)\nos.environ[\"nnUNet_results\"] = results_dir\nprint(f\"nnUNet_results -> {results_dir}\")\n\nt0 = time.time()\nsubprocess.run([\"nnUNetv2_train\", \"504\", \"2d\", \"0\"], check=True)\n# To resume if disconnected: change above to [\"nnUNetv2_train\", \"504\", \"2d\", \"0\", \"--c\"]\nelapsed = time.time() - t0\n\nfold_dir = os.path.join(\n    results_dir,\n    \"Dataset504_VFSS_INCA\", \"nnUNetTrainer__nnUNetPlans__2d\", \"fold_0\"\n)\nprint(f\"\\nDone in {elapsed/3600:.1f}h\")\nprint(f\"Checkpoints: {fold_dir}\")\nif os.path.isdir(fold_dir):\n    print(\"Contents:\", os.listdir(fold_dir))",
+   "outputs": [],
+   "execution_count": null
+  },
+  {
+   "cell_type": "code",
+   "metadata": {},
+   "source": "# === Cell 5: Predict + Evaluate ===\n\nimport os, json, csv, re, shutil, subprocess\nimport numpy as np\nfrom PIL import Image\n\nRESULTS_BASE = os.path.join(PROJECT, \"nnunet_baseline_results\")\nos.makedirs(RESULTS_BASE, exist_ok=True)\n\nos.environ[\"nnUNet_results\"] = os.path.join(WORKSPACE, \"nnUNet_results_inca\")\n\n# Predict\nRAW = os.environ[\"nnUNet_raw\"]\nimagesTs = os.path.join(RAW, \"Dataset504_VFSS_INCA\", \"imagesTs\")\npred_dir = os.path.join(RESULTS_BASE, \"predictions_inca\")\nif os.path.isdir(pred_dir):\n    shutil.rmtree(pred_dir)\nos.makedirs(pred_dir)\n\nsubprocess.run([\n    \"nnUNetv2_predict\",\n    \"-i\", imagesTs,\n    \"-o\", pred_dir,\n    \"-d\", \"504\", \"-c\", \"2d\", \"-f\", \"0\"\n], check=True)\n\n# Evaluate\nGT_DIR = os.path.join(PROJECT, \"data\", \"inca_dataset\", \"test\", \"masks\")\ngt_files = sorted([f for f in os.listdir(GT_DIR) if f.endswith(\".png\")])\ngt_by_stem = {f.replace(\".png\", \"\"): os.path.join(GT_DIR, f) for f in gt_files}\n\ndef normalize_pred_stem(fname):\n    stem = fname.replace(\".png\", \"\")\n    stem = re.sub(r\"_\\d{4}$\", \"\", stem)\n    return stem\n\ndef compute_dice_iou(pred_bin, gt_bin):\n    intersection = np.sum(pred_bin * gt_bin)\n    sum_pred = np.sum(pred_bin)\n    sum_gt = np.sum(gt_bin)\n    dice = (2.0 * intersection) / (sum_pred + sum_gt) if (sum_pred + sum_gt) > 0 else 1.0\n    union = sum_pred + sum_gt - intersection\n    iou = intersection / union if union > 0 else 1.0\n    return dice, iou\n\npred_files = sorted([f for f in os.listdir(pred_dir) if f.endswith(\".png\")])\npred_by_stem = {normalize_pred_stem(f): os.path.join(pred_dir, f) for f in pred_files}\nmatched = sorted(set(pred_by_stem.keys()) & set(gt_by_stem.keys()))\nprint(f\"Matched: {len(matched)} of {len(gt_files)} test images\")\n\nper_image = []\nfor stem in matched:\n    gt = np.array(Image.open(gt_by_stem[stem]).convert(\"L\"))\n    pred = np.array(Image.open(pred_by_stem[stem]).convert(\"L\"))\n    if pred.shape != gt.shape:\n        pred = np.array(Image.fromarray(pred).resize((gt.shape[1], gt.shape[0]), Image.NEAREST))\n    gt_bin = (gt > 0).astype(np.float32)\n    pred_bin = (pred > 0).astype(np.float32)\n    dice, iou = compute_dice_iou(pred_bin, gt_bin)\n    per_image.append({\"stem\": stem, \"f1\": dice, \"iou\": iou})\n\nmean_f1 = float(np.mean([r[\"f1\"] for r in per_image]))\nmean_iou = float(np.mean([r[\"iou\"] for r in per_image]))\n\n# Save\ncsv_path = os.path.join(RESULTS_BASE, \"per_image_metrics_inca.csv\")\nwith open(csv_path, \"w\", newline=\"\") as f:\n    writer = csv.DictWriter(f, fieldnames=[\"stem\", \"f1\", \"iou\"])\n    writer.writeheader()\n    writer.writerows(per_image)\n\nmetrics = {\n    \"condition\": \"nnunet_inca_100pct\",\n    \"real_train\": 634 + 140,\n    \"mean_f1\": mean_f1,\n    \"mean_iou\": mean_iou,\n    \"num_test_images\": len(per_image),\n}\nwith open(os.path.join(RESULTS_BASE, \"metrics_inca.json\"), \"w\") as f:\n    json.dump(metrics, f, indent=2)\n\nprint(f\"\\nnnU-Net INCA 100%: F1={mean_f1:.4f}, IoU={mean_iou:.4f} ({len(per_image)} images)\")\nprint(f\"Saved: {csv_path}\")",
+   "outputs": [],
+   "execution_count": null
+  }
+ ]
+}
