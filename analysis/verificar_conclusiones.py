@@ -122,6 +122,19 @@ CONCLUSIONES = [
         "dice": "Es la comparacion mas limpia de la tanda: 3 de 3 semillas.",
     },
     {
+        "nombre": "5. Que extremo del ranking de entropia no cambia nada",
+        "a": ["runs_pool_incertidumbre/MT_menos_inciertos"],
+        "b": ["runs_pool_incertidumbre/MT_mas_inciertos"],
+        "etiqueta_a": "pool de los menos inciertos",
+        "etiqueta_b": "pool de los mas inciertos",
+        # Los dos brazos solo cambian el directorio del pool.
+        "permitidos": {"unlabeled_subdir", "unlabeled_dir"},
+        "semillas": {0, 1, 2},
+        "delta": +0.0070,
+        "dice": ("Es la comparacion PRE-REGISTRADA: si la incertidumbre ordenara "
+                 "la utilidad, el extremo opuesto tendria que ir peor. No va peor."),
+    },
+    {
         "nombre": "4. La augmentation moderada no cambia el resultado supervisado",
         "a": ["runs_nnunet_ablation/A_baseline_fixnoise",
               "runs_nnunet_ablation/X_sup_base"],
