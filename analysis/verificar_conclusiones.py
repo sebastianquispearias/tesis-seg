@@ -246,6 +246,9 @@ GENERACION = {
     "runs_nnunet_ablation/C2_aug_full": "ruido sano",
     "runs_resolucion/E_320_6img": "ruido sano",
     "runs_resolucion/F_1024_6img": "ruido sano",
+    "runs_nnunet_ablation/P_clahe": "ruido sano",
+    "runs_nnunet_ablation/P_he": "ruido sano",
+    "runs_nnunet_ablation/P_denoise": "ruido sano",
 }
 
 EJES = [
@@ -260,8 +263,17 @@ EJES = [
      ["runs_nnunet_ablation/C2_aug_full"], -0.0165),
     ("normalizacion z-score", ["runs_nnunet_ablation/A_baseline"],
      ["runs_nnunet_ablation/B_zscore"], -0.0121),
-    ("batch size 1", ["runs_nnunet_ablation/A_baseline"],
-     ["runs_nnunet_ablation/D_bs1"], -0.0458),
+    # Los tres tratamientos de intensidad. Su control es X_sup_base, de la misma
+    # generacion, y no A_baseline_fixnoise, que es de otra sesion.
+    ("CLAHE suave", ["runs_nnunet_ablation/X_sup_base"],
+     ["runs_nnunet_ablation/P_clahe"], -0.0151),
+    ("ecualizacion de histograma", ["runs_nnunet_ablation/X_sup_base"],
+     ["runs_nnunet_ablation/P_he"], -0.0164),
+    ("non-local means denoising", ["runs_nnunet_ablation/X_sup_base"],
+     ["runs_nnunet_ablation/P_denoise"], -0.0956),
+    # D_bs1 NO es un ajuste de nnU-Net, que entrena con lotes de tres parches
+    # distintos. Es el control de batch que hace limpia la comparacion de
+    # resolucion, y va aparte, mas abajo.
 ]
 
 print()
@@ -284,6 +296,24 @@ for nombre, ctrl, var, esperado in EJES:
     elif abs(d - esperado) > TOLERANCIA:
         print("      FALLO  el delta se movio: escrito {:+.4f}".format(esperado))
         fallos.append("eje " + nombre)
+
+# Dos brazos llegan a seis imagenes por paso y no rinden lo mismo, porque uno las
+# toma de un solo frame. Es la razon por la que D_bs1 no puede figurar como un
+# ajuste de nnU-Net, y la razon por la que las dos condiciones de resolucion se
+# entrenaron con lotes de tres frames.
+print()
+print("EL LOTE PEQUENO NO ES EL PROBLEMA; EL LOTE PEQUENO Y CORRELACIONADO, SI")
+print("-" * 84)
+for carpeta, forma in (("runs_nnunet_ablation/D_bs1", "6 vistas de UN frame"),
+                       ("runs_resolucion/E_320_6img", "6 vistas de TRES frames"),
+                       ("runs_nnunet_ablation/A_baseline", "30 vistas de CINCO frames")):
+    v, _ = por_semilla([carpeta])
+    cfg = leer_runs(carpeta)[0][2]
+    print("   {:34s} bs={} num_aug={}  {:26s} F1 {:.4f}".format(
+        os.path.basename(carpeta), cfg.get("batch_size"), cfg.get("num_augmented"),
+        forma, media(list(v.values()))))
+print("   Los dos primeros entrenan con el mismo numero de imagenes por paso y")
+print("   difieren en 0.07 de F1. Solo cambia de cuantos frames vienen.")
 
 print()
 print("=" * 84)
