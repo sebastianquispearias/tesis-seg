@@ -1,0 +1,168 @@
+PREGUNTAS PARA LA DEFENSA (24/09/2026)
+======================================
+
+Como usar este archivo:
+- Responde debajo de cada pregunta, con TUS palabras.
+- 2 o 3 frases. Como se lo dirias a la banca.
+- Si no sabes, escribe "no se". Eso tambien sirve:
+  me dice que hay que explicarte.
+- Cuando termines, avisame y te corrijo una por una.
+
+Salen de lo que le preguntaron a Vinicius el 17/9
+y de lo que dice tu tesis.
+
+
+A. EL PROBLEMA Y LOS DATOS
+--------------------------
+
+1. Por que segmentar las vertebras C2-C4 en VFSS?
+   Para que le sirve a un medico?
+
+   Tu respuesta:
+
+
+
+2. Por que separaste los datos por video
+   y no por frame?
+
+   Tu respuesta:
+
+
+
+3. Cuantos datos tienes y como se anotaron?
+   Mediste la concordancia entre anotadores?
+
+   Tu respuesta:
+
+
+
+4. Tus imagenes no tienen calibracion en mm.
+   Eso afecta a tus resultados?
+
+   Tu respuesta:
+
+
+
+B. EL METODO (SEMISUPERVISADO)
+------------------------------
+
+5. Que es el aprendizaje semisupervisado,
+   y por que lo usaste aqui?
+
+   Tu respuesta:
+
+
+
+6. Como funciona pseudo-label?
+   Que es tau = 0.95 y por que ese valor?
+
+   Tu respuesta:
+
+
+
+7. Como funciona Mean Teacher?
+   Que es la EMA y por que 0.99?
+
+   Tu respuesta:
+
+
+
+8. Cual es la diferencia entre
+   pseudo-label y Mean Teacher?
+
+   Tu respuesta:
+
+
+
+9. Que es lambda_u y la rampa?
+   Por que el SSL empieza en la epoca 15?
+
+   Tu respuesta:
+
+
+
+C. TU CONTRIBUCION (EL POOL SIN ETIQUETA)
+-----------------------------------------
+
+10. Que es el pool sin etiqueta
+    y como lo construiste?
+
+    Tu respuesta:
+
+
+
+11. Que es el radio r?
+    Que diferencia hay entre temporal y aleatorio?
+
+    Tu respuesta:
+
+
+
+12. Por que usar TODOS los frames laterales
+    (74 774) no mejora sobre r = 10 (3 937)?
+
+    Tu respuesta:
+
+
+
+D. ARQUITECTURAS Y NNU-NET
+--------------------------
+
+13. Por que elegiste U-Net++ con EfficientNet-B3?
+
+    Tu respuesta:
+
+
+
+14. nnU-Net saca mas F1 que tu pipeline.
+    Eso no invalida tu trabajo?
+
+    Tu respuesta:
+
+
+
+15. Que hiciste exactamente con nnU-Net?
+    Lo modificaste?
+
+    Tu respuesta:
+
+
+
+16. Por que pesos de ImageNet
+    y no pesos de rayos X?
+
+    Tu respuesta:
+
+
+
+E. EVALUACION
+-------------
+
+17. Por que F1 (Dice)?
+    Usaste alguna metrica de contorno?
+
+    Tu respuesta:
+
+
+
+18. Hiciste tests estadisticos?
+    Con cuantas semillas?
+
+    Tu respuesta:
+
+
+
+19. Por que BCE + Dice como perdida?
+
+    Tu respuesta:
+
+
+
+F. CIERRE
+---------
+
+20. Cuales son las limitaciones de tu trabajo?
+
+    Tu respuesta:
+
+

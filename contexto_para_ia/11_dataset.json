@@ -1,0 +1,11 @@
+{
+  "channel_names": {
+    "0": "Xray"
+  },
+  "labels": {
+    "background": 0,
+    "vertebra": 1
+  },
+  "numTraining": 262,
+  "file_ending": ".png"
+}

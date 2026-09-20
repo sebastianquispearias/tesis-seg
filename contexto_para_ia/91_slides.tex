@@ -1,0 +1,1383 @@
+\documentclass[aspectratio=169]{beamer}
+
+% =========================
+% Encoding, fonts, language
+% =========================
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english,portuguese]{babel}
+\selectlanguage{english}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% =========================
+% Graphics, math, tables
+% =========================
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor,colortbl}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usetikzlibrary{shapes.geometric,arrows,arrows.meta,positioning,fit,backgrounds,calc}
+
+% =========================
+% Theme & beamer housekeeping
+% =========================
+\usetheme{LACdefesa}
+\setbeamertemplate{navigation symbols}{}
+
+\setbeamerfont{title}{series=\bfseries,size=\Large}
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{enumerate items}[default]
+
+% Logos del footer
+\renewcommand{\LACLogoLeft}{images/logo-puc.png}
+\renewcommand{\LACLogoCenter}{images/dept.png}
+
+\titlegraphic{\includegraphics[height=1.0cm,keepaspectratio]{images/logo-puc.png}}
+
+% =========================
+% Colors & helpers
+% =========================
+\definecolor{PUCBlue}{HTML}{003C71}
+\definecolor{Accent1}{HTML}{2A9D8F}
+\definecolor{Accent2}{HTML}{E76F51}
+\definecolor{Accent3}{HTML}{6A4C93}
+\setbeamercolor{structure}{fg=PUCBlue}
+\renewcommand{\arraystretch}{1.2}
+
+% Macros
+\newcommand{\good}[1]{\textcolor{Accent1}{\textbf{#1}}}
+\newcommand{\warn}[1]{\textcolor{Accent2}{\textbf{#1}}}
+\newcommand{\tbnote}[1]{\par{\tiny\color{gray}#1}}
+
+% Colores del experimental design (de la proposta)
+\definecolor{lowlabel}{RGB}{225, 245, 238}
+\definecolor{highlabel}{RGB}{250, 236, 231}
+\definecolor{sslpurple}{RGB}{238, 237, 254}
+\definecolor{graybox}{RGB}{241, 239, 232}
+\definecolor{accentgreen}{RGB}{29, 158, 117}
+\definecolor{accentorange}{RGB}{216, 90, 48}
+\definecolor{pool1}{RGB}{232, 225, 247}
+\definecolor{pool2}{RGB}{210, 196, 240}
+\definecolor{pool3}{RGB}{182, 160, 228}
+
+% TikZ macro: experimental design figure (reutilizado de la proposta)
+\newcommand{\makefigone}{%
+\begin{tikzpicture}[
+  x=1cm, y=1cm, font=\sffamily\footnotesize,
+  every node/.style={inner sep=2.5pt},
+  panel/.style={draw=gray!35, rounded corners=4pt, fill=gray!3},
+  box/.style={draw, rounded corners=3pt, minimum width=3.1cm, minimum height=1.0cm, text width=2.8cm, align=center},
+  sslbox/.style={draw, rounded corners=3pt, fill=sslpurple, draw=violet!60, minimum width=2.4cm, minimum height=0.55cm, align=center},
+  >={Stealth[length=4pt]}
+]
+\draw[panel] (-8.0, 0.15) rectangle (8.0, -3.20);
+\draw[panel] (-8.0, -3.55) rectangle (-0.2, -8.15);
+\draw[panel] ( 0.2, -3.55) rectangle ( 8.0, -8.15);
+\node[font=\sffamily\small\bfseries, anchor=west] at (-7.55, -0.28) {(A) Regime de quantidade de labels};
+\node[draw=gray!60, rounded corners=2pt, fill=white, align=center, font=\scriptsize, text width=1.5cm, minimum height=1.0cm] (unmsub) at (-6.25, -1.25) {\textbf{Labels}\\\textbf{reduzidos}\\66, 111, 174 fr.};
+\node[box, fill=lowlabel, draw=teal!60] (unm) at (-2.55, -1.25) {\textbf{UNM}\\[1pt] \scriptsize 218 frames de treino\\[-1pt] \scriptsize (23 pacientes)};
+\node[box, fill=highlabel, draw=orange!60] (inca) at (2.55, -1.25) {\textbf{INCA}\\[1pt] \scriptsize 634 frames de treino\\[-1pt] \scriptsize (75 pacientes)};
+\node[draw=gray!60, rounded corners=2pt, fill=white, align=center, font=\scriptsize, text width=1.5cm, minimum height=1.0cm] (incasub) at (6.25, -1.25) {\textbf{Labels}\\\textbf{reduzidos}\\56, 132, 283 fr.};
+\draw[->, dashed, thin, gray!70!black] (unm.west) -- (unmsub.east);
+\draw[->, dashed, thin, gray!70!black] (inca.east) -- (incasub.west);
+\node[fill=white, inner sep=2pt, font=\scriptsize\itshape, text=gray!55!black] at ($(unm.west)!0.5!(unmsub.east) + (0,0.25)$) {subconjunto};
+\node[fill=white, inner sep=2pt, font=\scriptsize\itshape, text=gray!55!black] at ($(inca.east)!0.5!(incasub.west) + (0,0.25)$) {subconjunto};
+\node[sslbox] (sslq) at (0, -2.75) {\scriptsize SSL ajuda?};
+\coordinate (joinL) at (-1.80, -2.75); \coordinate (joinR) at ( 1.80, -2.75);
+\draw[thin] (unm.south) |- (joinL); \draw[thin] (inca.south) |- (joinR);
+\draw[dashed, thin, gray!70!black] (unmsub.south) |- (joinL);
+\draw[dashed, thin, gray!70!black] (incasub.south) |- (joinR);
+\draw[->, thin] (joinL) -- (sslq.west); \draw[->, thin] (joinR) -- (sslq.east);
+\node[font=\sffamily\small\bfseries, anchor=west] at (-7.80, -3.88) {(B) Tamanho do pool sem anotação};
+\draw[dashed, gray!35, very thin] (-4.00, -4.50) -- (-4.00, -7.40);
+\draw[thick, gray!55] (-6.60, -4.55) -- (-1.40, -4.55);
+\draw[thick, gray!55] (-6.60, -4.48) -- (-6.60, -4.62);
+\draw[thick, gray!55] (-1.40, -4.48) -- (-1.40, -4.62);
+\node[font=\scriptsize, gray, anchor=west] at (-7.80, -4.20) {Linha do tempo do vídeo};
+\fill[violet!80] (-4.07, -4.65) rectangle (-3.93, -4.45);
+\draw[-{Stealth[length=3pt]}, gray!65, thin, shorten >=2pt] (-3.00, -4.82) -- (-3.85, -4.58);
+\node[font=\scriptsize, gray!80!black, anchor=west] at (-2.95, -4.82) {Frame anotado};
+\node[font=\scriptsize\bfseries, violet!45!black, anchor=west] at (-7.80, -5.20) {$r{=}3$};
+\node[font=\scriptsize, gray, anchor=west] at (-7.00, -5.20) {$\pm 100$ ms};
+\fill[pool1, draw=violet!45, thin] (-4.30, -5.32) rectangle (-3.70, -5.08);
+\node[font=\scriptsize\bfseries, violet!55!black, anchor=west] at (-7.80, -5.90) {$r{=}10$};
+\node[font=\scriptsize, gray, anchor=west] at (-7.00, -5.90) {$\pm 333$ ms};
+\fill[pool2, draw=violet!55, thin] (-4.80, -6.02) rectangle (-3.20, -5.78);
+\node[font=\scriptsize\bfseries, violet!70!black, anchor=west] at (-7.80, -6.60) {$r{=}20$};
+\node[font=\scriptsize, gray, anchor=west] at (-7.00, -6.60) {$\pm 667$ ms};
+\fill[pool3, draw=violet!65, thin] (-5.60, -6.72) rectangle (-2.40, -6.48);
+\fill[graybox, draw=gray!55, thin] (-6.60, -7.42) rectangle (-1.40, -7.18);
+\node[font=\scriptsize\itshape, gray!70!black] at (-4.00, -7.30) {todos os frames laterais (74{,}774)};
+\draw[<->, gray!70, thin] (-1.05, -5.20) -- (-1.05, -7.30);
+\node[font=\scriptsize, gray, rotate=90, align=center] at (-0.80, -6.25) {Tamanho do pool crescente};
+\node[font=\sffamily\small\bfseries, anchor=west] at (0.55, -3.88) {(C) Política de seleção de frames};
+\node[font=\scriptsize\bfseries, accentgreen, anchor=west] at (0.55, -4.40) {Proximidade temporal};
+\node[font=\scriptsize, gray!75!black, anchor=west] at (0.55, -4.80) {Frames próximos ao anotado};
+\draw[thick, gray!40] (0.55, -5.30) -- (7.60, -5.30);
+\draw[thick, gray!55] (0.55, -5.22) -- (0.55, -5.38);
+\draw[thick, gray!55] (7.60, -5.22) -- (7.60, -5.38);
+\fill[violet!80] (4.02, -5.48) rectangle (4.18, -5.12);
+\foreach \x in {3.5, 3.70, 3.90, 4.50, 4.3, 4.5, 4.7} {\fill[accentgreen] (\x-0.08, -5.48) rectangle (\x+0.08, -5.12);}
+\node[font=\scriptsize\bfseries, accentorange, anchor=west] at (0.55, -6.00) {Aleatório, mesmo tamanho};
+\node[font=\scriptsize, gray!75!black, anchor=west] at (0.55, -6.40) {Mesma quantidade, distribuídos pelo vídeo};
+\draw[thick, gray!40] (0.55, -6.90) -- (7.60, -6.90);
+\draw[thick, gray!55] (0.55, -6.82) -- (0.55, -6.98);
+\draw[thick, gray!55] (7.60, -6.82) -- (7.60, -6.98);
+\fill[violet!80] (4.02, -7.08) rectangle (4.18, -6.72);
+\foreach \x in {0.70, 2.40, 2.60, 3.10, 4.40, 6.80, 7.40} {\fill[accentorange] (\x-0.08, -7.08) rectangle (\x+0.08, -6.72);}
+\fill[violet!80] (1.00, -7.72) rectangle (1.20, -7.52); \node[font=\scriptsize, anchor=west] at (1.28, -7.62) {Anotado};
+\fill[accentgreen] (3.30, -7.72) rectangle (3.50, -7.52); \node[font=\scriptsize, anchor=west] at (3.58, -7.62) {Temporal};
+\fill[accentorange] (5.70, -7.72) rectangle (5.90, -7.52); \node[font=\scriptsize, anchor=west] at (5.98, -7.62) {Aleatório};
+\end{tikzpicture}%
+}
+
+% Contador para preservar el total de slides al entrar a backup
+\newcounter{finalframe}
+
+% =========================
+% Meta (titulo, autor, etc.)
+% =========================
+\title{Semi-supervised learning\\ for cervical vertebra segmentation\\ in videofluoroscopic swallowing studies}
+\subtitle{M.Sc. Proposal Defense}
+\author{Sebastian Quispe Arias}
+\institute{Pontif\'{i}cia Universidade Cat\'{o}lica do Rio de Janeiro\\
+\hspace{15}Departamento de Inform\'{a}tica}
+\date{June 2026}
+
+
+\begin{document}
+
+
+%% ========================================
+%% SLIDE 1: TITLE (layout custom)
+%% ========================================
+\begin{frame}[plain]
+  % Logos en esquinas superiores (izquierda PUC, derecha DI)
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=north west, inner sep=0pt] at ([xshift=0.5cm, yshift=-0.4cm]current page.north west)
+      {\includegraphics[height=1.1cm,keepaspectratio]{images/logo-puc.png}};
+    \node[anchor=north east, inner sep=0pt] at ([xshift=-0.5cm, yshift=-0.4cm]current page.north east)
+      {\includegraphics[height=1.1cm,keepaspectratio]{images/dept.png}};
+  \end{tikzpicture}
+
+  \vspace{1.6cm}
+
+  \begin{center}
+    % T\'{i}tulo principal
+    {\large\bfseries Semi-supervised learning\\[0.1cm]
+     for cervical vertebra segmentation\\[0.1cm]
+     in videofluoroscopic swallowing studies\par}
+
+    \vspace{0.3cm}
+    {\small\itshape Defesa de Mestrado}
+
+    \vspace{0.8cm}
+
+    % Autor + fecha
+    {\normalsize Sebastian Quispe Arias}\\[0.2cm]
+    {\footnotesize Setembro de 2026}
+  \end{center}
+
+  \vfill
+
+  % Advisor centrado abajo
+  \begin{center}
+    \small
+    \textbf{Orientador:} Prof. Paulo Ivson Netto Santos \\
+    \textbf{Coorientador:} Luiz Fernando Trindade Santos
+  \end{center}
+\end{frame}
+
+
+%% ========================================
+%% DIVIDER 1: INTRODUÇÃO
+
+%% ----- NUEVO: bottom line up front, antes de la motivacion -----
+\begin{frame}{O que este trabalho pergunta, e o que encontrou}
+  \vspace{0.3em}
+  \textbf{RQ1. Em que regime de anotação o SSL ajuda?}
+  \begin{itemize}\footnotesize
+    \item Só onde o supervisionado ainda não saturou. Em UNM, $0{,}801 \rightarrow 0{,}860$. Em INCA com todas as etiquetas, nada.
+  \end{itemize}
+
+  \smallskip
+  \textbf{RQ2. Quanto importa o pool de frames não rotulados?}
+  \begin{itemize}\footnotesize
+    \item Importa, e os dois métodos reagem em direções opostas.
+  \end{itemize}
+
+  \smallskip
+  \textbf{RQ3. A proximidade temporal ajuda a escolher esses frames?}
+  \begin{itemize}\footnotesize
+    \item Não. Não se separa de uma escolha aleatória do mesmo tamanho.
+  \end{itemize}
+
+  \smallskip
+  \textbf{E a jusante?}
+  \begin{itemize}\footnotesize
+    \item Uma máscara melhor coloca a região de interesse mais perto, mas não move o escalar C2--C4: o limite está na regra de pós-processamento, não na máscara.
+  \end{itemize}
+
+  \note{%
+    Treinta segundos. Es el mapa para que sepan qu\'{e} van a juzgar.
+
+    Para Geraldo, que no estuvo en la propuesta, este slide es lo que le permite colgar todo lo dem\'{a}s. Para Alberto y C\'{e}sar, es el recordatorio de d\'{o}nde qued\'{o} el trabajo.
+
+    NO desarrollar aqu\'{i}. Cada l\'{i}nea tiene su slide de resultados m\'{a}s adelante.
+  }
+\end{frame}
+
+%% ========================================
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\Huge\bfseries Introdução}
+  \vfill
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 2: MOTIVATION
+%% ========================================
+\begin{frame}{Disfagia e VFSS}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.55\textwidth}
+      \textbf{Disfagia}
+      \begin{itemize}
+        \item Dificuldade para engolir
+        \item Frequente em câncer de cabeça e pescoço
+        \item Aspiração silenciosa $\rightarrow$ pneumonia, mortalidade
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Videofluoroscopic swallowing study (VFSS)}
+      \begin{itemize}
+        \item Exame padrão para disfagia
+        \item Vídeo de raios-X lateral durante a deglutição
+        \item Vértebras cervicais C2--C4 como referência anatômica
+      \end{itemize}
+
+    \column{0.45\textwidth}
+      \centering
+      \vspace{0.6cm}
+      \includegraphics[width=0.9\textwidth,height=5.5cm,keepaspectratio]{images/vfss_frame.png}
+  \end{columns}
+
+  \note{%
+    Empezar: dysphagia es la dificultad para tragar. Muy com\'{u}n en pacientes con c\'{a}ncer de cabeza y cuello, donde radioterapia y cirug\'{i}a da\~{n}an las estructuras involucradas.
+
+    Lo grave: aspiraci\'{o}n silenciosa. El paciente no tose pero el alimento o l\'{i}quido va al pulm\'{o}n. Causa neumon\'{i}a, desnutrici\'{o}n, y mortalidad.
+
+    Necesitamos un examen objetivo: VFSS. V\'{i}deo de rayos X mientras el paciente traga un contraste (bario). Permite ver la deglutici\'{o}n din\'{a}micamente.
+
+    Las v\'{e}rtebras cervicales C2--C4 son la referencia anat\'{o}mica clave para normalizar mediciones (escala C2-C4, tracking del hueso hioides, definir regiones de inter\'{e}s).
+
+    Aqu\'{i} est\'{a} la imagen [se\~{n}alar]: se ve un frame lateral con las v\'{e}rtebras marcadas en verde.
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 3: THE ANNOTATION BOTTLENECK
+%% ========================================
+\begin{frame}{O gargalo da anotação}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.55\textwidth}
+      \textbf{Anotação pixel a pixel é cara}
+      \begin{itemize}
+        \item Requer expertise clínica
+        \item Vários minutos por frame
+        \item Variabilidade entre anotadores (Dice $\approx$ 0,85)
+        \item Restrições de privacidade limitam compartilhamento
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Frames sem anotação são abundantes}
+      \begin{itemize}
+        \item Cada vídeo VFSS = milhares de frames
+        \item Apenas alguns são anotados
+        \item O resto é descartado no treinamento supervisionado
+      \end{itemize}
+
+    \column{0.45\textwidth}
+      \centering
+      \vspace{1.2cm}
+      \begin{tikzpicture}[scale=0.8]
+        % Eje
+        \draw[->] (0,0) -- (5.2,0) node[right] {\scriptsize frames};
+        \draw[->] (0,0) -- (0,4.2);
+
+        % UNM
+        \node[anchor=east] at (-0.1,3.5) {\scriptsize \textbf{UNM}};
+        \fill[Accent2] (0,3.2) rectangle (0.025,3.8);
+        \node[anchor=west, font=\tiny] at (0.05,3.5) {218 anotados};
+        \fill[PUCBlue] (0,2.5) rectangle (5,3.1);
+        \node[anchor=west, font=\tiny, white] at (0.1,2.8) {74{,}774 sem anotação};
+
+        % INCA
+        \node[anchor=east] at (-0.1,1.5) {\scriptsize \textbf{INCA}};
+        \fill[Accent2] (0,1.2) rectangle (0.08,1.8);
+        \node[anchor=west, font=\tiny] at (0.1,1.5) {634 anotados};
+        \fill[PUCBlue] (0,0.5) rectangle (2.1,1.1);
+        \node[anchor=west, font=\tiny, white] at (0.1,0.8) {31{,}260 sem anotação};
+
+        % Leyenda
+        \fill[Accent2] (0,-0.5) rectangle (0.3,-0.3);
+        \node[anchor=west, font=\tiny] at (0.4,-0.4) {anotados};
+        \fill[PUCBlue] (1.7,-0.5) rectangle (2,-0.3);
+        \node[anchor=west, font=\tiny] at (2.1,-0.4) {sem anotação};
+      \end{tikzpicture}
+  \end{columns}
+
+  \note{%
+    El problema central: anotar VFSS al nivel de pixel es muy costoso. Requiere expertise cl\'{i}nica para distinguir los bordes de las v\'{e}rtebras entre estructuras superpuestas (mand\'{i}bula, hioides). Cada frame toma varios minutos.
+
+    Adem\'{a}s, hay variabilidad entre anotadores: a\'{u}n expertos no se ponen 100\% de acuerdo. Medimos Dice de 0.854 en UNM y 0.806 en INCA.
+
+    Y hay restricciones de privacidad: los datasets p\'{u}blicos son escasos.
+
+    Pero hay algo importante: los frames sin anotar son abundantes. Cada v\'{i}deo VFSS tiene miles de frames, pero solo unos pocos se anotan. El resto se descarta en el entrenamiento supervisado tradicional.
+
+    Aqu\'{i} est\'{a} la asimetr\'{i}a: en UNM tenemos 218 labeled vs 74,774 unlabeled. Ratio 343:1.
+
+    Eso motiva nuestra pregunta: \textquestiondown podemos aprovechar esos frames no anotados?
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 4: SSL IDEA
+%% ========================================
+\begin{frame}{Semi-supervised learning (SSL)}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.5\textwidth}
+      \textbf{SSL: combina frames anotados e sem anotação no treinamento}
+      \begin{itemize}
+        \item A cada iteração, combina perda supervisionada (com labels) $+$ perda não supervisionada (consistência ou pseudo-labeling)
+        \item Funciona quando ambos os conjuntos compartilham a mesma distribuição (Oliver et al., 2018)
+        \item Em VFSS: mesmos vídeos, mesma máquina, mesma anatomia \checkmark
+      \end{itemize}
+
+    \column{0.5\textwidth}
+      \centering
+      \vspace{1.0cm}
+      \begin{tikzpicture}[
+        scale=0.9, transform shape,
+        labeledbox/.style={draw=Accent2!80, fill=Accent2!10, rounded corners=2pt, minimum width=1.4cm, minimum height=0.6cm, font=\scriptsize},
+        unlabeledbox/.style={draw=PUCBlue!80, fill=PUCBlue!10, rounded corners=2pt, minimum width=1.4cm, minimum height=0.6cm, font=\scriptsize},
+        model/.style={draw=black, fill=gray!15, rounded corners=3pt, minimum width=1.8cm, minimum height=1.2cm, font=\scriptsize, align=center}
+      ]
+        % Labeled (arriba izq)
+        \node[labeledbox] (l1) at (0, 1.1) {anotados};
+        \node[font=\tiny, gray, above=1pt of l1] {poucos};
+
+        % Unlabeled stack (abajo izq) - dibujadas en orden para que u3 quede arriba (frontal)
+        \node[unlabeledbox] (u3) at (0.2, -0.5) {};
+        \node[unlabeledbox] (u2) at (0.1, -0.6) {};
+        \node[unlabeledbox] (u1) at (0, -0.7) {sem anotação};
+        \node[font=\tiny, gray, below=1pt of u1] {muitos};
+
+        % Model (centro)
+        \node[model] (m) at (3, 0.2) {Modelo de\\ segmentação};
+
+        % Output (derecha) - propiedades inline
+        \node[draw=Accent1, fill=Accent1!15, rounded corners=2pt, minimum width=1.7cm, minimum height=0.7cm, font=\scriptsize] (mask) at (5.5, 0.2) {máscara C2--C4};
+
+        % Flechas - de cada caja al borde izquierdo del modelo, en el punto Y correspondiente
+        \draw[->, thick] (l1.east) -- ([yshift=0.2cm]m.west);
+        \draw[->, thick] (u1.east) -- ([yshift=-0.2cm]m.west);
+        \draw[->, thick] (m.east) -- (mask.west);
+      \end{tikzpicture}
+  \end{columns}
+
+  \note{%
+    SSL es una clase de m\'{e}todos que aprovecha datos sin etiquetar junto con los etiquetados durante el entrenamiento.
+
+    \textquestiondown Por qu\'{e} encaja bien con VFSS? Porque los frames sin etiquetar vienen de los MISMOS v\'{i}deos que los etiquetados (mismo dominio). Y los frames cercanos en tiempo suelen verse similares.
+
+    En la literatura reciente de VFSS hay otras alternativas: active learning con expertos, foundation models tipo MedSAM, m\'{e}todos no supervisados.
+
+    Pero el uso conjunto de frames etiquetados + no etiquetados del mismo v\'{i}deo (que es SSL cl\'{a}sico) no se ha estudiado sistem\'{a}ticamente para esta tarea.
+
+    Por eso nuestro estudio se enfoca en SSL cl\'{a}sico: Pseudo-Labeling y Mean Teacher.
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 3.5: SSL GAP IN VFSS (justificación)
+%% ========================================
+\begin{frame}{A lacuna de SSL em VFSS}
+  \small
+  \textbf{Busca no Scopus} (12/06/2026):
+  \vspace{0.3em}
+
+  \begin{block}{}
+  \scriptsize\ttfamily
+  (``semi-supervised'' OR ``pseudo-label*'' OR ``mean teacher'' OR \\
+  \phantom{(}``consistency regularization'') \\
+  AND \\
+  (``VFSS'' OR ``videofluoroscop*'' OR ``swallowing study'')
+  \end{block}
+
+  \vspace{0.3em}
+  $\rightarrow$ \textbf{19 documentos encontrados}
+  \vspace{0.5em}
+
+  Após revisão manual:
+  \begin{itemize}
+    \item 17 não são de VFSS (pâncreas, coxa, coluna lombar, ecocardiografia\ldots)
+    \item 2 estudam mastigação/deglutição por áudio, não por imagem
+    \item \textbf{0 abordam SSL para segmentação de vértebras em VFSS}
+  \end{itemize}
+
+  \vspace{0.4em}
+  \textcolor{Accent1}{\textbf{Este trabalho preenche essa lacuna.}}
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 5: RESEARCH QUESTIONS
+%% ========================================
+\begin{frame}{Perguntas de pesquisa}
+  \vspace{0.5em}
+
+  \textbf{RQ1.} Em que regime de quantidade de labels o SSL melhora a segmentação?
+
+  \vspace{0.8em}
+
+  \textbf{RQ2.} Como o tamanho do pool de frames sem anotação afeta o desempenho do SSL?
+
+  \vspace{0.8em}
+
+  \textbf{RQ3.} A seleção por proximidade temporal supera a seleção aleatória do mesmo tamanho?
+
+  \note{%
+    Tres preguntas pr\'{a}cticas que no se han abordado conjuntamente en trabajos previos.
+
+    RQ1: SSL es conocido que ayuda m\'{a}s cuando hay pocos labels. Pero el r\'{e}gimen exacto para VFSS no estaba caracterizado.
+
+    RQ2: Tama\~{n}o del pool unlabeled importa. M\'{a}s no siempre es mejor (Fu et al. 2019 mostraron eso en laparoscop\'{i}a).
+
+    RQ3: La estructura temporal de VFSS sugiere que frames vecinos al labeled podr\'{i}an ser \'{u}tiles. Comparamos contra selecci\'{o}n random del mismo tama\~{n}o.
+
+    Para responder estas preguntas: dos m\'{e}todos SSL (Pseudo-Labeling y Mean Teacher), dos datasets (UNM y INCA).
+  }
+\end{frame}
+
+
+%% ========================================
+%% DIVIDER 2: SETUP EXPERIMENTAL
+%% ========================================
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\Huge\bfseries Setup experimental}
+  \vfill
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 6: DATASETS
+%% ========================================
+\begin{frame}{Datasets}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.58\textwidth}
+      \centering
+      \footnotesize
+      \begin{tabular}{@{}lcc@{}}
+        \toprule
+                                & \textbf{UNM}   & \textbf{INCA} \\
+        \midrule
+        Vídeos                  & 35             & 234 \\
+        Pacientes               & 35             & 115 \\
+        População               & Mista          & Câncer C\&P \\
+        Frames anotados (treino)& 218            & 634 \\
+        Frames sem anotação     & 74{,}774       & 31{,}260 \\
+        Duração do vídeo (média)& 127\,s         & 6,6\,s \\
+        Sem anotação : anotados & $\sim$343:1    & $\sim$49:1 \\
+        \bottomrule
+      \end{tabular}
+
+    \column{0.42\textwidth}
+      \textbf{Dois regimes complementares}
+      \begin{itemize}
+        \item UNM: poucos labels, pool sem anotação enorme
+        \item INCA: mais labels, pool menor
+      \end{itemize}
+
+      \bigskip
+
+      Os dois datasets usam o mesmo protocolo de anotação (ImageJ, supervisionado por especialista).
+
+      \bigskip
+
+      Dice com a especialista clínica:\\
+      UNM 0,854 \quad INCA 0,806\\
+      Entre anotadores (INCA, 898 frames): 0,874
+  \end{columns}
+
+  \note{%
+    Dos datasets institucionales con estructuras distintas.
+
+    UNM viene del TalkBank de la Universidad de New Mexico, p\'{u}blico. 35 v\'{i}deos largos (127 s en promedio) de pacientes con distintas condiciones de disfagia.
+
+    INCA es del Instituto Nacional de C\^{a}ncer en Rio. 234 v\'{i}deos cortos (6.6 s cada uno), un solo trago por v\'{i}deo, pacientes con c\'{a}ncer de cabeza y cuello.
+
+    Esta asimetr\'{i}a es importante: UNM ofrece pocos labels pero un pool unlabeled enorme (ratio 343:1). INCA ofrece m\'{a}s labels pero pool menor (49:1). Permite estudiar SSL en dos reg\'{i}menes diferentes.
+
+    Para evaluar confiabilidad de las anotaciones, un especialista cl\'{i}nico independiente reanot\'{o} 20 frames de cada dataset. Acuerdo Dice de 0.854 en UNM y 0.806 en INCA.
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 7: ARCHITECTURE AND BASELINE
+%% ========================================
+\begin{frame}{Arquitetura de segmentação}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.5\textwidth}
+      \textbf{U-Net++ com EfficientNet-B3}
+      \begin{itemize}
+        \item Encoder pré-treinado em ImageNet
+        \item Backbone fixo em todos os experimentos SSL
+        \item Entrada: $320 \times 320$ em escala de cinza
+        \item Loss: BCE + Dice
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Por que fixar o backbone?}
+      \begin{itemize}
+        \item Isolar o efeito do SSL da variabilidade da arquitetura
+        \item Comparar contra 5 arquiteturas supervisionadas separadamente
+      \end{itemize}
+
+    \column{0.5\textwidth}
+      \centering
+      \vspace{0.8cm}
+      \includegraphics[width=0.95\textwidth,height=5.5cm,keepaspectratio]{images/unetpp_arch.png}
+      \tbnote{Adaptado de Zhou et al. (2018).}
+  \end{columns}
+
+  \note{%
+    La arquitectura de segmentaci\'{o}n es U-Net++ con encoder EfficientNet-B3 preentrenado en ImageNet.
+
+    Importante: la arquitectura es \textbf{fija} en todos los experimentos SSL. La raz\'{o}n es aislar el efecto del SSL del efecto de cambiar la arquitectura.
+
+    Despu\'{e}s comparamos por separado contra 5 arquitecturas supervisadas (U-Net, DeepLabV3+, FPN, TransUNet, BiFPN-U-Net) y nnU-Net como referencia self-configuring.
+
+    Frames en escala de grises a 320x320, normalizados a [0,1]. Loss combinado BCE + Dice.
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 8: SSL METHODS
+%% ========================================
+\begin{frame}{Métodos avaliados: PL e MT}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.5\textwidth}
+      \textbf{Pseudo-Labeling (PL)}
+      \begin{itemize}
+        \item Teacher gera pseudo-labels duros onde está confiante: $p \geq 0{,}95$ ou $p \leq 0{,}05$
+        \item Student aprende apenas dos pixels confiáveis
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Mean Teacher (MT)}
+      \begin{itemize}
+        \item O mapa de probabilidades suave do teacher é o alvo de consistência
+        \item Todos os pixels contribuem, incluindo os incertos
+      \end{itemize}
+
+    \column{0.5\textwidth}
+      \centering
+      \vspace{1.2cm}
+      \begin{tikzpicture}[
+        scale=0.85, transform shape,
+        net/.style={draw=black, fill=PUCBlue!15, rounded corners=2pt, minimum width=1.6cm, minimum height=0.7cm, font=\scriptsize},
+        aug/.style={font=\tiny, gray, fill=white, inner sep=1pt},
+        out/.style={draw=Accent1!80, fill=Accent1!15, rounded corners=2pt, minimum width=1.5cm, minimum height=0.55cm, font=\tiny}
+      ]
+        % Input (izquierda centro)
+        \node[font=\scriptsize] (inp) at (0, 0) {sem anotação};
+
+        % Teacher (arriba)
+        \node[net] (teacher) at (2.6, 1) {Teacher};
+        \node[draw=Accent1, fill=Accent1!15, rounded corners=2pt, minimum width=1.6cm, minimum height=0.6cm, font=\tiny] (tout) at (5.2, 1) {previsão};
+
+        % Student (abajo)
+        \node[net] (student) at (2.6, -1) {Student};
+        \node[draw=Accent1, fill=Accent1!15, rounded corners=2pt, minimum width=1.6cm, minimum height=0.6cm, font=\tiny] (sout) at (5.2, -1) {previsão};
+
+        % Flechas input → nets
+        \draw[->] (inp.east) -- node[aug, pos=0.55]{aug fraco} (teacher.west);
+        \draw[->] (inp.east) -- node[aug, pos=0.55]{aug forte} (student.west);
+
+        % Flechas nets → outs
+        \draw[->] (teacher.east) -- (tout.west);
+        \draw[->] (student.east) -- (sout.west);
+
+        % EMA (student → teacher)
+        \draw[->, dashed, gray] (student.north) to[bend right=40] node[font=\tiny, midway, right, gray]{EMA} (teacher.south);
+
+        % Match loss
+        \node[font=\tiny, align=center, gray] (loss) at (7.2, 0) {match\\(loss)};
+        \draw[<->, dotted, gray!70] (tout.south) -- (loss.north);
+        \draw[<->, dotted, gray!70] (sout.north) -- (loss.south);
+      \end{tikzpicture}
+  \end{columns}
+
+  \note{%
+    Dos m\'{e}todos representativos de familias distintas de SSL para segmentaci\'{o}n.
+
+    Ambos comparten configuraci\'{o}n teacher-student. El teacher es un EMA (exponential moving average) de los pesos del student, con coeficiente 0.99.
+
+    PL: el teacher genera pseudo-labels duras (binarizadas). Solo se usan los p\'{i}xeles donde el teacher est\'{a} muy confidente (probabilidad $\geq$ 0.95 o $\leq$ 0.05). Sigue FixMatch.
+
+    MT: en lugar de binarizar, se usa la probabilidad continua del teacher como target. El student se entrena para coincidir con MSE. Todos los p\'{i}xeles contribuyen.
+
+    \textquestiondown Cu\'{a}l es mejor? Depende del r\'{e}gimen, lo veremos en resultados.
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 9: UNLABELED POOLS
+%% ========================================
+\begin{frame}{Desenho experimental}
+  \centering
+  \resizebox{!}{0.78\textheight}{\makefigone}
+
+  \note{%
+    Este slide es la figura completa del experimental design del paper.
+
+    Panel A: las dos datasets (UNM, INCA) con sus reducciones de labels para los experimentos de label-efficiency.
+
+    Panel B: construcci\'{o}n de pools unlabeled por radio temporal. Para cada frame etiquetado en el tiempo $t$, tomamos los frames cercanos dentro de una ventana $[t-r, t+r]$. Probamos seis radios: 3, 5, 7, 10, 15, 20. Y un pool grande con todos los frames laterales del video.
+
+    Los radios cubren las escalas de tiempo relevantes de la degluci\'{o}n: r=3 son $\pm$100ms (un sub-evento), r=20 son $\pm$667ms (casi una transici\'{o}n far\'{i}ngea completa).
+
+    Panel C: las dos pol\'{i}ticas de selecci\'{o}n. Temporal-neighbor (verde) selecciona frames cercanos al labeled. Size-matched random (naranja) toma el mismo n\'{u}mero pero distribuidos aleatoriamente en el video. Esto permite separar el efecto del tama\~{n}o del pool del efecto de la pol\'{i}tica.
+  }
+\end{frame}
+
+
+%% ========================================
+%% DIVIDER 3: RESULTADOS
+%% ========================================
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\Huge\bfseries Resultados}
+  \vfill
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 10: RESULT 1 - SSL ACROSS LABELS
+%% ========================================
+\begin{frame}{Resultado 1: quando o SSL ajuda}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.55\textwidth}
+      \centering
+      \includegraphics[height=6.5cm,keepaspectratio]{images/fig3_label_efficiency_vertical.pdf}
+
+    \column{0.45\textwidth}
+      \textbf{Quando SSL ajuda}
+      \begin{itemize}
+        \item UNM (218): \phantom{0,000} $0{,}801 \to$ \good{$0{,}860$} \footnotesize ($\Delta = +0{,}059$)
+        \item INCA 10\% (56): $0{,}844 \to$ \good{$0{,}865$} \footnotesize ($\Delta = +0{,}021$)
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Quando SSL não ajuda}
+      \begin{itemize}
+        \item INCA full (634): $0{,}906 = 0{,}906$
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{MT preserva qualidade sob redução de labels}\\
+      \footnotesize $-4\%$ F1 em INCA 10\%, $-1\%$ em UNM 25\%
+  \end{columns}
+
+  \note{%
+    El primer resultado responde RQ1: SSL ayuda cuando la baseline supervisada no ha saturado.
+
+    En UNM, con 218 frames etiquetados, la supervisada llega a F1 = 0.801. Mean Teacher con el pool all-lateral sube a 0.860, una mejora de +0.059 (significativa, Wilcoxon a nivel video).
+
+    En INCA con el dataset completo (634 frames), no hay mejora: la supervisada ya est\'{a} en 0.906 y SSL la iguala. Ya satur\'{o}.
+
+    Para verificar que no es una propiedad del dataset sino del r\'{e}gimen de etiquetas, redujimos INCA a 10\%, 25\%, 50\%. Solo a 10\% (56 frames) SSL vuelve a mejorar: MT llega a 0.865 vs 0.844 supervisado.
+
+    Conclusi\'{o}n: SSL no es universal. Funciona cuando la supervisada est\'{a} bajo aproximadamente F1 = 0.85.
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 11: RESULT 2 - POOL COMPOSITION
+%% ========================================
+\begin{frame}{Resultado 2: o tamanho do pool (RQ2)}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.55\textwidth}
+      \centering
+      \includegraphics[height=6.5cm,keepaspectratio]{images/fig2_pool_size_curves_vertical.pdf}
+
+    \column{0.45\textwidth}
+      \textbf{Os dois métodos reagem ao contrário}
+      \begin{itemize}
+        \item PL: melhor com o pool \emph{pequeno} ($0,852$ em $r{=}3$), pior com o maior ($0,803$ em $r{=}20$)
+        \item MT: melhor com o pool \emph{completo} ($0,860$), com $74{.}774$ frames
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Por quê}
+      \begin{itemize}
+        \item PL compromete um rótulo duro por pixel: um erro confiante do professor reforça o erro
+        \item MT segue um alvo contínuo, mais tolerante ao ruído
+      \end{itemize}
+
+      \bigskip
+      \footnotesize\textbf{Usar todos os frames disponíveis não é a escolha segura.}
+  \end{columns}
+
+  \note{%
+    El segundo resultado responde RQ2 y RQ3.
+
+    RQ2 (tama\~{n}o del pool): los dos m\'{e}todos reaccionan distinto. PL prefiere pools peque\~{n}os: mejor en r=3 (1,257 frames). MT prefiere pools grandes: mejor en all-lateral (74,774 frames).
+
+    \textquestiondown Por qu\'{e}? PL compromete una etiqueta dura por p\'{i}xel, entonces los errores del teacher son m\'{a}s da\~{n}inos en pools amplios. MT usa target continuo, es m\'{a}s robusto al ruido.
+
+    RQ3 (pol\'{i}tica de selecci\'{o}n): la proximidad temporal no aporta ventaja significativa sobre selecci\'{o}n random del mismo tama\~{n}o. Tests Wilcoxon con p mayor a 0.05 en todas las configuraciones.
+
+    Esto es contraintuitivo: la estructura temporal de VFSS pareci\'{a} sugerir que los vecinos temporales ayudar\'{i}an m\'{a}s. No fue el caso.
+  }
+\end{frame}
+
+%% ----- NUEVO: RQ3 como resultado propio -----
+\begin{frame}{Resultado 3: a proximidade temporal não ajuda (RQ3)}
+  \vspace{0.3em}
+  \textbf{Em cada tamanho de pool, a seleção temporal foi comparada com um controle aleatório do mesmo tamanho}
+
+  \bigskip
+  \centering
+  \footnotesize
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    \textbf{UNM, pseudo-rotulagem} & $r{=}3$ & $r{=}7$ & $r{=}10$ & $r{=}15$ \\
+    \midrule
+    Temporal   & $0,852$ & $0,830$ & $0,832$ & $0,840$ \\
+    Aleatório  & $0,835$ & $0,819$ & $0,845$ & $0,846$ \\
+    \bottomrule
+  \end{tabular}
+
+  \bigskip
+  \raggedright
+  \begin{itemize}\footnotesize
+    \item O sinal muda com o raio: temporal ganha nos pequenos, perde nos grandes
+    \item No raio de referência $r{=}10$, testes de Wilcoxon por paciente não detectaram diferença para nenhum dos dois métodos, em nenhuma semente
+    \item Em INCA, as diferenças ficam abaixo de $0{,}001$ na maioria das configurações
+  \end{itemize}
+
+  \medskip
+  \footnotesize\textbf{A estrutura temporal do vídeo não é, por si só, um critério útil para escolher frames.}
+
+  \note{%
+    Esta era la tercera pregunta de investigaci\'{o}n y la respuesta es NO. Es un resultado, no una nota al pie.
+
+    La intuici\'{o}n dec\'{i}a lo contrario: en v\'{i}deo, los vecinos temporales deber\'{i}an ser los frames m\'{a}s \'{u}tiles. No lo son.
+
+    Lo importante: no es que salga poco. Es que el SIGNO cambia con el radio. Gana en r=3 y r=7, pierde en r=10 y r=15. Eso es ruido, no un efecto.
+
+    Y en r=10, que es el radio de referencia del trabajo, el Wilcoxon por paciente no detecta diferencia en ninguna semilla ni con ninguno de los dos m\'{e}todos.
+
+    Si preguntan por qu\'{e} lo esperaba: porque los frames vecinos comparten anatom\'{i}a y el modelo ya la ve. Aportan poca informaci\'{o}n nueva.
+  }
+\end{frame}
+
+
+
+%% ========================================
+%% SLIDE 12: RESULT 3 - VS ARCHITECTURES
+%% ========================================
+\begin{frame}{Resultado 4: SSL vs arquiteturas supervisionadas}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.55\textwidth}
+      \centering
+      \footnotesize
+      \textbf{UNM, regime de labels completo (218)}
+      \begin{tabular}{@{}lc@{}}
+        \toprule
+        \textbf{Método} & \textbf{F1} \\
+        \midrule
+        \multicolumn{2}{@{}l}{\emph{Supervisionado ($320{\times}320$)}} \\
+        \quad BiFPN-U-Net(T)                & 0,759 \\
+        \quad DeepLabV3+                    & 0,776 \\
+        \quad FPN                           & 0,799 \\
+        \quad U-Net++ (baseline)            & 0,801 \\
+        \quad U-Net                         & 0,824 \\
+        \quad TransUNet                     & 0,851 \\
+        \midrule
+        \multicolumn{2}{@{}l}{\emph{SSL ($320{\times}320$)}} \\
+        \quad PL ($r{=}3$, U-Net++)         & \good{0,852} \\
+        \quad MT (pool completo, U-Net++)   & \good{0,860} \\
+        \midrule
+        \multicolumn{2}{@{}l}{\emph{Auto-configurado ($1024{\times}1024$)}} \\
+        \quad nnU-Net                       & 0,907 \\
+        \bottomrule
+      \end{tabular}
+
+    \column{0.45\textwidth}
+      SSL com U-Net++ alcança F1 comparável à melhor arquitetura supervisionada do pipeline (TransUNet, 0,851).
+
+      \bigskip
+
+      nnU-Net chega a F1 = 0,907, mas usa:
+      \begin{itemize}
+        \item Resolução diferente ($1024 \times 1024$)
+        \item Treino mais longo, augmentation diferente
+      \end{itemize}
+  \end{columns}
+
+  \note{%
+    Tercer resultado: comparaci\'{o}n contra arquitecturas supervisadas.
+
+    En UNM con 218 etiquetados, evaluamos 5 arquitecturas supervisadas. El rango va de BiFPN-U-Net(T) en 0.759 (sin pretraining) a TransUNet en 0.851, la m\'{a}s fuerte de las testeadas.
+
+    SSL con U-Net++ alcanza 0.852 (PL) y 0.860 (MT). Iguala o supera la arquitectura supervisada m\'{a}s fuerte.
+
+    Por separado, nnU-Net llega a 0.907. Pero hay que interpretarlo con cuidado: nnU-Net usa resoluci\'{o}n 1024x1024, entrenamiento mucho m\'{a}s largo, augmentation distinto. Es una comparaci\'{o}n a nivel de pipeline, no de paradigma de aprendizaje.
+
+    El mensaje principal: SSL y la optimizaci\'{o}n del pipeline son direcciones complementarias. SSL mejora sin cambiar el backbone, nnU-Net adapta el pipeline al dataset.
+  }
+\end{frame}
+
+%% ----- NUEVO: SSL sobre los otros backbones -----
+\begin{frame}{SSL em outros backbones}
+  \centering
+  \footnotesize
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    \textbf{Backbone} & \textbf{Supervisionado} & \textbf{Mean Teacher} & \textbf{$\Delta$} \\
+    \midrule
+    U-Net             & $0,824$ & $0,851$ & $+0,027$ \\
+    DeepLabV3+        & $0,776$ & $0,800$ & $+0,024$ \\
+    U-Net++           & $0,801$ & $0,830$ & $+0,029$ \\
+    FPN               & $0,799$ & $0,811$ & $+0,012$ \\
+    BiFPN-U-Net(T)    & $0,759$ & $0,757$ & $-0,002$ \\
+    TransUNet         & $0,851$ & $0,831$ & $-0,020$ \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.8em}
+  \footnotesize
+  \textit{Mesma configuração para os seis: Mean Teacher, pool aleatório $r{=}15$.}
+
+  \begin{itemize}\footnotesize
+    \item Quatro dos seis ganham entre $0,012$ e $0,029$
+    \item TransUNet, a melhor supervisionada, é a única que perde
+  \end{itemize}
+
+  \note{%
+    Este frame responde a Paulo, que pregunt\'{o} d\'{o}nde estaba el SSL sobre todos los backbones.
+
+    El punto: el uso de frames no etiquetados no est\'{a} atado a U-Net++. Cuatro de seis mejoran.
+
+    Pero NO llega a todos. BiFPN no se mueve y TransUNet pierde 0,020. Y eso contradice la intuici\'{o}n de Jean en la propuesta, que esperaba que TransUNet, por ser m\'{a}s profunda, se beneficiara m\'{a}s.
+
+    Si preguntan por qu\'{e}: no lo sabemos. Lo medimos y sale as\'{i}. Una hip\'{o}tesis es la saturaci\'{o}n: TransUNet ya parte de 0,851 supervisada, que es donde el SSL deja de ayudar en el resto del trabajo.
+
+    OJO: el bloque supervisado es de abril y dos filas del bloque SSL son de septiembre. La conclusi\'{o}n aguanta por los dos caminos, est\'{a} verificado.
+  }
+\end{frame}
+
+%% ----- NUEVO: la descomposicion de nnU-Net -----
+\begin{frame}{nnU-Net: o que explica a diferença?}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.46\textwidth}
+      \textbf{nnU-Net como referência}
+      \begin{itemize}\footnotesize
+        \item $0,896$ (25\%) a $0,907$ (100\%)
+        \item Acima de tudo o que treinamos
+        \item Mas o pipeline difere em tudo: resolução, augmentation, duração, normalização
+      \end{itemize}
+
+      \bigskip
+      \textbf{Cada diferença, uma por uma}
+      \begin{itemize}\footnotesize
+        \item Transplantada sozinha no nosso pipeline
+        \item Medida contra o seu próprio controle, três sementes
+      \end{itemize}
+
+    \column{0.54\textwidth}
+      \centering
+      \footnotesize
+      \begin{tabular}{@{}lcc@{}}
+        \toprule
+        \textbf{Configuração} & \textbf{$\Delta$ F1} & \textbf{Sementes} \\
+        \midrule
+        Resolução $1024^2$        & $+0,001 \pm 0,036$ & 2 de 3 \\
+        Augmentation moderada     & $-0,003 \pm 0,038$ & 2 de 3 \\
+        Augmentation completa     & $-0,017 \pm 0,014$ & 0 de 3 \\
+        Normalização z-score      & $-0,012 \pm 0,064$ & 1 de 3 \\
+        \bottomrule
+      \end{tabular}
+
+      \vspace{0.8em}
+      \footnotesize
+      \textbf{Nenhuma explica a diferença sozinha.}
+      A única mudança consistente é uma \emph{queda} com a augmentation completa.
+  \end{columns}
+
+  \note{%
+    Este frame responde a Alberto y a C\'{e}sar, que en la propuesta dijeron que la comparaci\'{o}n con nnU-Net no era justa.
+
+    La respuesta no es defenderse: es descomponerla. Cogimos cada diferencia de configuraci\'{o}n y la trasplantamos sola a nuestro pipeline.
+
+    Ninguna explica la diferencia. Y la \'{u}nica consistente, con las tres semillas en la misma direcci\'{o}n, es que la augmentation completa de nnU-Net EMPEORA.
+
+    Los dos perfiles comparten toda la fotometr\'{i}a y solo difieren en la geometr\'{i}a, as\'{i} que la resta atribuye el da\~{n}o a la geometr\'{i}a: rotar 180 grados y espejar produce im\'{a}genes que el modelo nunca ve en test.
+
+    Si preguntan por 480 de resoluci\'{o}n: no la probamos. Probamos la alternativa que estaba en cuesti\'{o}n, la de nnU-Net.
+  }
+\end{frame}
+
+
+
+%% ========================================
+%% SLIDE 13: QUALITATIVE RESULTS
+%% ========================================
+\begin{frame}{Resultados qualitativos}
+  \centering
+  \includegraphics[width=\textwidth,height=6.9cm,keepaspectratio]{images/fig5_qualitative_horizontal_annotated.pdf}
+
+  \vspace{0.4em}
+  \footnotesize
+  \textcolor{Accent1}{Verde} = TP, \textcolor{Accent2}{vermelho} = FN, \textcolor{Accent3}{azul} = FP.
+
+  \note{%
+    Este slide es principalmente visual.
+
+    La figura muestra ejemplos cualitativos en los tres reg\'{i}menes: UNM, INCA 10\% (pocos labels), INCA full.
+
+    Filas: input frame, ground truth, predicci\'{o}n supervisada, predicci\'{o}n con Mean Teacher.
+
+    Lo importante es que en los reg\'{i}menes donde SSL mejora cuantitativamente (UNM y INCA 10\%), tambi\'{e}n se ve cualitativamente: bordes m\'{a}s precisos, menos false negatives (zonas rojas) que el supervisado.
+
+    En INCA full, donde SSL no mejora, las predicciones son similares.
+
+    Este es un buen punto para que la banca observe los datos directamente. Yo destacar\'{i}a las mejoras visibles en UNM (primera columna).
+  }
+\end{frame}
+
+%% ----- NUEVO: incerteza -----
+\begin{frame}{Incerteza preditiva}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.52\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=5.2cm,keepaspectratio]{images/fig_uncertainty_vs_pool.pdf}
+
+    \column{0.48\textwidth}
+      \textbf{Onde está a incerteza}
+      \begin{itemize}\footnotesize
+        \item Entropia binária por pixel, numa banda de $5$~px em volta do contorno
+        \item Banda $0,049$ \quad dentro das vértebras $0,029$
+        \item Vãos entre vértebras $0,022$ \quad fundo $0,0005$
+      \end{itemize}
+
+      \bigskip
+      \textbf{O SSL não deixa o modelo mais certo}
+      \begin{itemize}\footnotesize
+        \item $0,049 \rightarrow 0,048$; o que muda é \emph{onde} a incerteza fica
+        \item O tamanho do pool também não muda: $0,041$ a $0,049$ de $1{.}257$ a $74{.}774$ frames
+      \end{itemize}
+  \end{columns}
+
+  \note{%
+    Este frame responde a Paulo, que dijo que no hab\'{i}a explicado c\'{o}mo se calcula la incertidumbre y pidi\'{o} un gr\'{a}fico contra el tama\~{n}o del pool.
+
+    La medida: entrop\'{i}a binaria de la probabilidad predicha, por p\'{i}xel. M\'{a}ximo ln 2 = 0,693. O sea que 0,049 es el 7 por ciento del m\'{a}ximo posible.
+
+    D\'{o}nde est\'{a}: pegada al contorno. El fondo pr\'{a}cticamente no duda.
+
+    Y el resultado negativo, que es el interesante: el SSL NO baja la incertidumbre total. La MUEVE, de dentro de las v\'{e}rtebras hacia los vanos entre ellas. Y correlaciona mejor con el error, de -0,25 a -0,51.
+
+    El gr\'{a}fico: el pool crece sesenta veces y la entrop\'{i}a no se mueve. Cambiar la semilla la mueve m\'{a}s que multiplicar el pool por sesenta.
+
+    NO decir que la incertidumbre sirve para seleccionar frames. Lo probamos y el contraste preregistrado sale nulo.
+  }
+\end{frame}
+
+%% ----- NUEVO: consecuencias practicas -----
+\begin{frame}{Consequências práticas}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.5\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=4.6cm,keepaspectratio]{images/fig_roi_lee.pdf}
+
+      \vspace{0.3em}
+      {\scriptsize\itshape Um frame do test set. Os valores ao lado são a média sobre os 63 frames.}
+
+    \column{0.5\textwidth}
+      \textbf{Região de interesse dinâmica}
+      \begin{itemize}\footnotesize
+        \item A máscara só dá uma \emph{posição}: o centroide ancora a janela
+        \item Supervisionado $6{,}09$~px do centroide de referência; Mean Teacher $4{,}62$~px
+        \item MT mais perto em $44$ dos $63$ frames ($p<0{,}001$)
+      \end{itemize}
+
+      \bigskip
+      \textbf{Escalar anatômico C2--C4}
+      \begin{itemize}\footnotesize
+        \item Erro mediano $9{,}3 \rightarrow 7{,}9$~px
+        \item Mas a regra de pós-processamento tem um piso de $6{,}9$~px, medido sobre as máscaras de referência
+        \item Máscaras melhores não movem mais o escalar
+      \end{itemize}
+  \end{columns}
+
+  \note{%
+    Este frame responde a C\'{e}sar, que pregunt\'{o} para qu\'{e} sirve cl\'{i}nicamente y si hace falta una segmentaci\'{o}n tan buena.
+
+    Dos tareas aguas abajo, medidas.
+
+    La ROI de Lee: la ventana tiene tama\~{n}o fijo, as\'{i} que la m\'{a}scara solo aporta una posici\'{o}n. Mean Teacher la coloca m\'{a}s cerca, y gana en 44 de 63 frames.
+
+    El escalar C2-C4: aqu\'{i} la respuesta es incomoda y la doy yo antes de que la pregunten. La mejora en C4 NO se traslada al escalar. Solo baja un 15 por ciento.
+
+    Por qu\'{e}: la regla que localiza las esquinas tiene un suelo de 6,9 p\'{i}xeles, medido aplic\'{a}ndola a las m\'{a}scaras de referencia, donde la segmentaci\'{o}n es correcta por construcci\'{o}n. Ese suelo se come el 87 por ciento del error.
+
+    Conclusi\'{o}n honesta: para ese escalar, m\'{a}s ganancia tiene que venir de la regla o de predecir las esquinas directamente, no de mejores m\'{a}scaras.
+  }
+\end{frame}
+
+
+
+%% ========================================
+%% SLIDE 14: LIMITATIONS
+%% ========================================
+
+%% ----- NUEVO: contribuciones -----
+\begin{frame}{Contribuições}
+  \vspace{0.4em}
+  \begin{itemize}
+    \item Primeira avaliação sistemática de SSL clássico para segmentação das vértebras cervicais em VFSS, em dois datasets institucionais
+    \medskip
+    \item Um estudo controlado da \textbf{construção do pool não rotulado}, tamanho e política, com o resto do pipeline fixo, de modo que as diferenças sejam atribuíveis
+    \medskip
+    \item Comparação contra \textbf{seis arquiteturas supervisionadas} e contra nnU-Net, com a diferença decomposta configuração por configuração
+    \medskip
+    \item Duas tarefas \textbf{a jusante} medidas, e não apenas o Dice: o escalar anatômico C2--C4 e o posicionamento da região de interesse
+  \end{itemize}
+
+  \note{%
+    Este slide no estaba y hace falta, sobre todo para Geraldo.
+
+    Lo que hay que transmitir: esto NO es un algoritmo nuevo de SSL. Es un estudio emp\'{i}rico de c\'{o}mo se construye el pool, con el pipeline fijo para que las diferencias sean atribuibles.
+
+    La cuarta es la que distingue el trabajo de un benchmark: no nos quedamos en el Dice, medimos si la m\'{a}scara mejor sirve para lo que el cl\'{i}nico hace despu\'{e}s.
+
+    NO decir "primer trabajo que aplica SSL a VFSS". Decir "primera evaluaci\'{o}n sistem\'{a}tica", que es lo que est\'{a} sostenido.
+  }
+\end{frame}
+
+\begin{frame}{Limitações}
+  \begin{itemize}
+    \item Backbone único (U-Net++ a $320 \times 320$); efeitos podem diferir com outros backbones
+    \medskip
+    \item FixMatch e cross-pseudo supervision não testadas, embora sejam refinamentos das mesmas duas famílias
+    \medskip
+    \item Test set pequeno em UNM (7 vídeos); INCA não é publicamente compartilhável
+  \end{itemize}
+
+  \note{%
+    Tres limitaciones honestas.
+
+    Primera: usamos un solo backbone fijo a 320x320. No sabemos si los efectos del tama\~{n}o del pool y selecci\'{o}n se mantienen con otros backbones.
+
+    Segunda: m\'{e}todos m\'{a}s recientes (FixMatch, cross-pseudo supervision) y otras familias (adversariales, contrastive) no fueron testados.
+
+    Tercera: el test set de UNM tiene solo 7 videos, lo que limita el poder estad\'{i}stico de los tests a nivel video. INCA est\'{a} bajo acuerdo institucional, no se puede compartir externamente.
+  }
+\end{frame}
+
+
+%% ========================================
+%% SLIDE 15: SCHEDULE AND FUTURE WORK
+%% ========================================
+% ================= FRAME DE LA PROPUESTA, FUERA EN LA DEFENSA =================
+% Una defensa no tiene trabajo restante. Se deja comentado, no borrado.
+% \begin{frame}{Cronograma e trabalho restante}
+%   \begin{columns}[T,totalwidth=\textwidth]
+%     \column{0.55\textwidth}
+%       \centering
+%       \footnotesize
+%       \begin{tabular}{@{}llc@{}}
+%         \toprule
+%         \textbf{Tarefa} & \textbf{Status} & \textbf{Data} \\
+%         \midrule
+%         Paper submetido            & Completo & 11/06/2026 \\
+%         Proposta (este documento)  & Completo & 12/06/2026 \\
+%         Draft inicial da dissertação & Completo & 12/06/2026 \\
+%         Análise qualitativa estendida & Pendente & 26/06/2026 \\
+%         Revisões finais do manuscrito & Pendente & 26/06/2026 \\
+%         Defesa final               & Pendente & 07/08/2026 \\
+%         \bottomrule
+%       \end{tabular}
+% 
+%     \column{0.45\textwidth}
+%       \textbf{Trabalho restante}
+%       \begin{itemize}
+%         \item Análise qualitativa estendida sobre os modelos treinados
+%         \item Revisões finais do manuscrito
+%         \item Incorporar o feedback desta banca
+%       \end{itemize}
+%   \end{columns}
+% 
+%   \note{%
+%     Estado del trabajo.
+% 
+%     El manuscrito del paper con la base t\'{e}cnica de la tesis ya fue submitido.
+% 
+%     La proposta (este documento) tambi\'{e}n est\'{a} completa.
+% 
+%     El draft inicial de la tesis completa est\'{a} bajo revisi\'{o}n.
+% 
+%     Quedan tres tareas:
+%     1. An\'{a}lisis cualitativo extendido sobre los modelos ya entrenados.
+%     2. Revisiones finales del manuscrito.
+%     3. Incorporar el feedback que reciba de esta banca examinadora.
+% 
+%     El trabajo experimental ya est\'{a} terminado. Lo que falta es an\'{a}lisis y escritura.
+%   }
+% \end{frame}
+
+
+%% ========================================
+%% SLIDE 16: CONCLUSIONS
+%% ========================================
+\begin{frame}{Conclusões}
+  \begin{itemize}
+    \item SSL clássico (PL, MT) melhora a segmentação das vértebras cervicais em VFSS quando o baseline supervisionado não saturou (abaixo de F1 $\approx$ 0,85 nos regimes avaliados)
+    \medskip
+    \item O tamanho do pool depende do método e do dataset (em UNM, PL com pool pequeno e MT com pool completo; em INCA reduzido, esse padrão não se manteve)
+    \medskip
+    \item A proximidade temporal não traz vantagem sistemática sobre seleção aleatória do mesmo tamanho
+  \end{itemize}
+
+  \note{%
+    Tres mensajes para llevarse de la presentaci\'{o}n.
+
+    Primero: SSL no es universal. Funciona en r\'{e}gimen de pocos labels (UNM, INCA 10\%), no cuando la supervisada ya satur\'{o}.
+
+    Segundo: el tama\~{n}o del pool importa, y los dos m\'{e}todos reaccionan distinto seg\'{u}n el dataset.
+
+    Tercero: la proximidad temporal no aporta ventaja sobre random.
+  }
+\end{frame}
+
+
+%% ========================================
+%% THANK YOU (al final)
+%% ========================================
+\begin{frame}
+  \centering
+  \vfill
+  {\Huge \textbf{Obrigado!}}\\[0.6em]
+  {\large Perguntas?}\\[1.4em]
+  \href{mailto:squispearias@aluno.puc-rio.br}{\texttt{squispearias@aluno.puc-rio.br}}\\[1.2em]
+\end{frame}
+
+
+%% ========================================
+%% BACKUP SLIDES (no contar en el total del footer)
+%% ========================================
+
+% Guardar el total antes de los backup
+\setcounter{finalframe}{\value{framenumber}}
+
+%% ----- BACKUP 1: Training details -----
+% Truco para que los backup slides NO cuenten en el total del footer
+\setcounter{framenumber}{\value{finalframe}}
+
+\begin{frame}{Backup: detalhes do treinamento}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.5\textwidth}
+      \textbf{Arquitetura}
+      \begin{itemize}
+        \item U-Net++ + EfficientNet-B3 (ImageNet)
+        \item Entrada: $320 \times 320$, escala de cinza
+        \item Loss: BCE + Dice
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Otimização}
+      \begin{itemize}
+        \item Adam, lr $= 10^{-3}$, weight decay $10^{-4}$
+        \item Lote: 5 rotuladas + 1 sem rótulo
+        \item Early stopping em IoU de validação, paciência 40
+      \end{itemize}
+
+    \column{0.5\textwidth}
+      \textbf{Detalhes do SSL}
+      \begin{itemize}
+        \item Teacher: EMA dos pesos do student ($\alpha = 0,99$)
+        \item Threshold de PL $\tau = 0,95$ (confiança em $p$ ou $1-p$)
+        \item Peso da loss não supervisionada: warmup linear
+      \end{itemize}
+
+      \bigskip
+
+      \textbf{Augmentation}
+      \begin{itemize}
+        \item Fraco: flip, crop pequeno
+        \item Forte: + intensity jitter, ruído gaussiano
+      \end{itemize}
+  \end{columns}
+\end{frame}
+
+
+%% ----- BACKUP 3: Other metrics -----
+\begin{frame}{Backup: outras métricas (UNM full)}
+  \centering
+  \footnotesize
+  \begin{tabular}{@{}lcc@{}}
+    \toprule
+    \textbf{Método}    & \textbf{Dice (F1)}    & \textbf{IoU}      \\
+    \midrule
+    Supervisionado     & $0,801 \pm 0,014$     & $0,702 \pm 0,010$ \\
+    PL ($r{=}3$)       & $0,852 \pm 0,019$     & $0,762 \pm 0,021$ \\
+    MT (pool completo) & $0,860 \pm 0,006$     & $0,769 \pm 0,007$ \\
+% As colunas de Precisao e Recall foram retiradas: nao constam em nenhum
+% run_report.json, portanto nao sao rastreaveis. Valores antigos, por se acaso:
+%    Supervisionado  precisao 0,838  recall 0,778
+%    PL (r=3)        precisao 0,866  recall 0,844
+%    MT (pool)       precisao 0,871  recall 0,853
+    \bottomrule
+  \end{tabular}
+
+  \vspace{1em}
+  \footnotesize
+  \textit{Média $\pm$ std entre seeds de treinamento. Test set: 7 vídeos, 63 frames.}
+\end{frame}
+
+
+%% ----- BACKUP 4: Hyperparameter sensitivity -----
+\begin{frame}{Backup: divisão dos datasets}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \column{0.5\textwidth}
+      \textbf{UNM}
+      \begin{itemize}
+        \item Divisão por paciente (sem vazamento)
+        \item Treino: 23 pacientes, 218 frames anotados
+        \item Validação: 5 pacientes
+        \item Teste: 7 pacientes, 63 frames
+      \end{itemize}
+
+    \column{0.5\textwidth}
+      \textbf{INCA}
+      \begin{itemize}
+        \item Divisão por paciente
+        \item Treino: 75 pacientes, 634 frames anotados
+        \item Validação: 17 pacientes
+        \item Teste: 23 pacientes, 194 frames
+      \end{itemize}
+  \end{columns}
+
+  \vspace{1em}
+  \footnotesize
+  \textit{Ambos datasets seguem divisão a nível de paciente para evitar vazamento temporal entre conjuntos.}
+\end{frame}
+
+
+\begin{frame}{Backup: o percurso de um frame}
+  \centering
+  \resizebox{!}{0.72\textheight}{%
+  \begin{tikzpicture}[
+    stg/.style={draw=PUCBlue!55, rounded corners=3pt, fill=white,
+                minimum width=3.0cm, minimum height=1.5cm,
+                text width=2.8cm, align=center, font=\scriptsize, inner sep=3pt},
+    net/.style={stg, fill=sslpurple, draw=Accent3!70},
+    avali/.style={stg, fill=lowlabel, draw=Accent1!70},
+    sslb/.style={draw=Accent2!55, rounded corners=3pt, fill=highlabel,
+                 minimum width=3.7cm, minimum height=1.55cm,
+                 text width=3.55cm, align=center, font=\scriptsize, inner sep=3pt,
+                 execute at begin node={\hyphenpenalty=10000\exhyphenpenalty=10000}},
+    fl/.style={-{Stealth[length=4pt]}, thick, PUCBlue!70},
+    sf/.style={-{Stealth[length=4pt]}, thick, Accent2!75, dashed}
+  ]
+
+  % linha 1: entrada, pré-processamento, rede
+  \node[stg] (n1) at (0,0)
+    {\textbf{Frame lateral}\\escala de cinza};
+  \node[stg, right=0.8cm of n1] (n2)
+    {\textbf{Pré-processamento}\\padding, $320\times320$\\normalizado $[0,1]$\\1 canal replicado $\times 3$};
+  \node[net, right=0.8cm of n2] (n3)
+    {\textbf{U-Net++}\\EfficientNet-B3\\encoder ImageNet};
+
+  \draw[fl] (n1) -- (n2);
+  \draw[fl] (n2) -- (n3);
+
+  % linha 2: saída e avaliação, da direita para a esquerda
+  \node[stg, below=1.6cm of n3] (n4)
+    {\textbf{Probabilidades}\\por pixel, $320\times320$};
+  \node[stg, left=0.8cm of n4] (n5)
+    {\textbf{Limiar 0,5}\\máscara binária};
+  \node[avali, left=0.8cm of n5] (n6)
+    {\textbf{F1 (Dice)}\\ASSD e HD95,\\na grade do modelo};
+
+  \draw[fl] (n3) -- (n4);
+  \draw[fl] (n4) -- (n5);
+  \draw[fl] (n5) -- (n6);
+
+  % linha 3: ramo semi-supervisionado, da esquerda para a direita
+  \node[sslb, below=1.7cm of n6] (s1)
+    {\textbf{Pool sem rótulo}\\mesmos vídeos de treino};
+  \node[sslb, right=0.8cm of s1] (s2)
+    {\textbf{Vistas fraca e forte}\\fraca: Teacher, forte: Student\\as duas passam pela rede};
+  \node[sslb, right=0.8cm of s2] (s3)
+    {\textbf{Perda não supervisionada}\\PL: $p\geq0{,}95$ ou $p\leq0{,}05$\\MT: consistência em todos os pixels};
+
+  \draw[sf] (s1) -- (s2);
+  \draw[sf] (s2) -- (s3);
+  \draw[sf] (s3.east) -- ++(0.9,0) |- (n3.east);
+
+  \node[draw=Accent2!45, dashed, rounded corners=4pt, inner sep=9pt,
+        fit=(s1)(s2)(s3)] (panel) {};
+  \node[font=\scriptsize\itshape, text=Accent2!85!black, anchor=north west]
+    at ($(panel.north west) + (0.1,0.36)$) {somente durante o treino semi-supervisionado};
+
+  \end{tikzpicture}%
+  }
+
+  \note{%
+    Slide de respaldo. Solo si preguntan por el flujo, que es lo que pide siempre quien abre el trabajo por primera vez.
+
+    La l\'{i}nea azul es lo que pasa con UN frame: entra en escala de grises, padding a casi cuadrado, 320 por 320, normalizado al intervalo unidad, y el canal se replica tres veces porque el encoder viene de ImageNet y espera tres canales. NO hay informaci\'{o}n de color: los tres canales son la misma intensidad.
+
+    Sale un mapa de probabilidad por p\'{i}xel, se umbraliza en 0,5, y la m\'{a}scara binaria se compara con la anotaci\'{o}n por F1, que es el Dice, y por las dos m\'{e}tricas de borde, ASSD y HD95. En la rejilla del modelo, no en la resoluci\'{o}n original.
+
+    OJO: el IoU NO es una m\'{e}trica de test en la tesis. Es el criterio de early stopping sobre validaci\'{o}n. En el deck hay IoU de test en el respaldo 29, pero esos valores no est\'{a}n en el documento.
+
+    OJO 2: el umbral de 0,5 de la binarizaci\'{o}n no aparece en el protocolo de evaluaci\'{o}n de la tesis; el \'{u}nico 0,5 escrito est\'{a} dentro de Pseudo-Labeling, l. 738. Si preguntan de d\'{o}nde sale, es el punto medio y no se ajust\'{o}.
+
+    La rama naranja discontinua solo existe en entrenamiento semi-supervisado: el pool sin etiquetar, las dos vistas, y la p\'{e}rdida no supervisada que entra en la misma red.
+
+    Si preguntan por la resoluci\'{o}n de la evaluaci\'{o}n, esa es la tarjeta 17.
+  }
+\end{frame}
+
+\end{document}
