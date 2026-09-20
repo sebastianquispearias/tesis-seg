@@ -85,13 +85,14 @@ archivo real y no supongas.
                               para compararlo con mi pipeline
 16_splits_final_OBSOLETO      OJO: ver arriba
 
-20..29c   mi pipeline: defaults, el bucle de entrenamiento,
+20..29f   mi pipeline: defaults, el bucle de entrenamiento,
           las perdidas, los pools, la aumentacion, los modelos,
           las metricas, la EMA, la evaluacion, el preprocesado,
-          el BiFPN-UNet de Kim, y mi trainer de Mean Teacher
-          (que hereda de nnUNetTrainer y va DENTRO de nnU-Net)
+          el BiFPN-UNet de Kim, el TransUNet vendorizado, y mi
+          trainer de Mean Teacher (que hereda de nnUNetTrainer y
+          va DENTRO de nnU-Net). Que se adapto en cada uno: mas abajo
 
-30_notebooks_sin_salidas/     los 25 notebooks: aqui esta lo que se
+30_notebooks_sin_salidas/     los 28 notebooks: aqui esta lo que se
                               hizo de verdad, experimento por experimento.
                               Los titulos de los notebooks 16 a 22 son
                               literalmente las preguntas que contestan
@@ -111,6 +112,57 @@ archivo real y no supongas.
                               espera mi respuesta, y corrigeme
 94_paper.tex                  el paper enviado a CMPB
 ```
+
+## QUE SE ADAPTO EN CADA ARQUITECTURA DE TERCEROS
+
+Dos de las arquitecturas no son de una libreria: vienen de un articulo. Esto es
+exactamente lo que se cambio, y donde mirarlo.
+
+### TransUNet (29d, 29e, 29f)
+
+El codigo del modelo esta vendorizado del repo oficial de TransUNet
+(Chen et al. 2021). **En esos tres archivos no hay marcas de modificacion
+propia**; los comentarios `# custom` que trae `vit_seg_configs.py` ya venian
+del repo original.
+
+La adaptacion esta en como se instancia, en `25_models.py`:
+
+```
+config = get_r50_b16_config()
+config.n_classes   = 1        (el default era 2)
+config.n_skip      = 3
+config.patches.grid = (20, 20)  (320/16 = 20 parches por lado;
+                                 el original asume 224/16 = 14)
+VisionTransformer(config, img_size=320)   (el default era 224)
+```
+
+O sea: se paso de segmentacion multiclase a **binaria**, y de 224x224 a
+**320x320**, que es la resolucion del resto de mi pipeline. La rejilla de
+parches se recalculo en consecuencia.
+
+Los pesos son `R50+ViT-B_16.npz` de **ImageNet-21k**, no de 1k. Se cargan con
+`model.load_from(weights)` y la ruta se pasa por la variable de entorno
+`TRANSUNET_PRETRAINED_PATH`.
+
+### BiFPN-U-Net(T) (29c)
+
+Este NO esta vendorizado: es una implementacion propia, 368 lineas, inspirada
+en Kim et al. 2021 (Diagnostics). Su propia cabecera declara que preserva:
+
+```
+encoder VGG16 (sin BN, sin pesos preentrenados)
+un BiFPN de una pasada con fast normalized fusion
+Bottleneck Transformer (MHSA) sobre P5
+decoder tipo U-Net con saltos desde las salidas del BiFPN
+```
+
+y dice explicitamente **"Not an exact reproduction"**: los detalles que el
+articulo no especifica se rellenaron con elecciones estandar. Eso tiene que
+decirse asi en la defensa, no como una reproduccion.
+
+Hay ademas un control en la tesis: se reentreno con un VGG16 preentrenado en
+ImageNet, y el F1 paso de 0.759 a 0.762, o sea que la falta de preentrenamiento
+no explica su desventaja.
 
 ## Cosas verificadas que conviene que sepas
 
