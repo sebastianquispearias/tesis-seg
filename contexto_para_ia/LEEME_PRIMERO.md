@@ -118,12 +118,14 @@ archivo real y no supongas.
 Dos de las arquitecturas no son de una libreria: vienen de un articulo. Esto es
 exactamente lo que se cambio, y donde mirarlo.
 
-### TransUNet (29d, 29e, 29f)
+### TransUNet (29d, 29e, 29f, y el informe 29g)
 
 El codigo del modelo esta vendorizado del repo oficial de TransUNet
-(Chen et al. 2021). **En esos tres archivos no hay marcas de modificacion
-propia**; los comentarios `# custom` que trae `vit_seg_configs.py` ya venian
-del repo original.
+(Chen et al. 2021). **Se comparo con el oficial y NO tiene ni un cambio de
+codigo**: el unico diff son dos lineas en blanco al final de cada archivo.
+El informe completo, con el comando para repetirlo, esta en
+`29g_transunet_vs_oficial.txt`. Los comentarios `# custom` que trae
+`vit_seg_configs.py` ya venian del repo original.
 
 La adaptacion esta en como se instancia, en `25_models.py`:
 

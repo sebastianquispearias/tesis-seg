@@ -1,0 +1,83 @@
+TRANSUNET: QUE SE MODIFICO DEL REPO OFICIAL
+===========================================
+
+Comparacion hecha el 19/09/2026 con `diff --strip-trailing-cr` entre los
+archivos de `tesis_seg/src/transunet/` y los del repo oficial:
+
+   https://github.com/Beckschen/TransUNet/tree/main/networks
+
+RESULTADO
+---------
+
+   vit_seg_modeling.py              453a454,455   (2 lineas en blanco)
+   vit_seg_configs.py               130a131,132   (2 lineas en blanco)
+   vit_seg_modeling_resnet_skip.py  160a161,162   (2 lineas en blanco)
+
+**Cero cambios de codigo.** Lo unico que difiere son lineas vacias al final
+de cada archivo. El codigo del modelo es el oficial, sin tocar.
+
+Nota: los comentarios `# custom` y `customized` que aparecen en
+`vit_seg_configs.py` YA VIENEN DEL REPO OFICIAL. No son modificaciones de
+este trabajo.
+
+ENTONCES, QUE SE ADAPTO
+-----------------------
+
+La adaptacion no esta en el modelo: esta en como se instancia, en
+`25_models.py`:
+
+   config = get_r50_b16_config()
+   config.n_classes    = 1          el oficial trae 2
+   config.n_skip       = 3
+   config.patches.grid = (20, 20)   320/16 = 20 parches por lado.
+                                    El oficial asume 224/16 = 14
+   VisionTransformer(config, img_size=320)   el oficial usa 224
+
+Es decir: de multiclase a BINARIA, y de 224x224 a 320x320, que es la
+resolucion del resto del pipeline. La rejilla de parches se recalculo en
+consecuencia.
+
+Pesos: `R50+ViT-B_16.npz` de **ImageNet-21k** (no 1k), cargados con
+`model.load_from(weights)`. La ruta se pasa por la variable de entorno
+TRANSUNET_PRETRAINED_PATH.
+
+COMO REPETIR ESTA COMPROBACION
+------------------------------
+
+   curl -sS -o vit_seg_modeling.py \
+     https://raw.githubusercontent.com/Beckschen/TransUNet/main/networks/vit_seg_modeling.py
+   diff --strip-trailing-cr vit_seg_modeling.py \
+     tesis_seg/src/transunet/vit_seg_modeling.py
+
+COMPARACION CON BIFPN-U-NET(T)
+------------------------------
+
+Con BiFPN no hay diff posible, y eso es en si una respuesta: no se partio de
+un repo. `29c_bifpn_unet.py` son 368 lineas escritas desde el articulo de
+Kim et al. 2021, y su propia cabecera declara "Not an exact reproduction":
+los detalles que el articulo no especifica se rellenaron con elecciones
+estandar.
+
+LOS 3 CANALES Y LOS PESOS DE IMAGENET
+-------------------------------------
+
+Las imagenes son PNG en gris, de un canal. Los pesos preentrenados esperan 3.
+En `29b_preprocessing.py`:
+
+   def ensure_rgb(image):
+       if image.ndim == 2:
+           image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+
+Se REPLICA el gris tres veces: R = G = B = gris. La informacion es la misma;
+solo cambia la forma para que encaje en la primera convolucion.
+
+Por que eso no rompe los pesos preentrenados: la primera convolucion tiene un
+nucleo por canal de entrada y SUMA las tres respuestas. Si los tres canales
+traen el mismo valor, esa suma equivale a aplicar un unico nucleo igual a la
+suma de los tres sobre la imagen en gris. Ningun filtro se descarta ni se
+reinicializa.
+
+Y una decision que conviene tener presente: se usan pesos de ImageNet pero
+**no** la normalizacion de ImageNet. En `20_defaults.py`, `imagenet_norm` es
+False, asi que las imagenes van a [0, 1] sin restar la media ni dividir por la
+desviacion de ImageNet.
